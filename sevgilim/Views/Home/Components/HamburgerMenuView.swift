@@ -74,13 +74,7 @@ struct HamburgerMenuView: View {
                     action: onSurprisesSelected
                 )
                 
-                MinimalMenuButton(
-                    icon: "lock.shield.fill",
-                    title: "Gizli Kasa",
-                    count: secretVaultService.items.count,
-                    theme: themeManager.currentTheme,
-                    action: onSecretVaultSelected
-                )
+            
                 
                 MinimalMenuButton(
                     icon: "calendar.badge.clock",
@@ -120,6 +114,14 @@ struct HamburgerMenuView: View {
                     count: songService.songs.count,
                     theme: themeManager.currentTheme,
                     action: onSongsSelected
+                )
+                
+                MinimalMenuButton(
+                    icon: "lock.shield.fill",
+                    title: "Özelll",
+                    count: secretVaultService.items.count,
+                    theme: themeManager.currentTheme,
+                    action: onSecretVaultSelected
                 )
             }
             .padding(.horizontal, 20)

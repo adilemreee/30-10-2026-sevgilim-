@@ -136,7 +136,7 @@ struct SecretVaultContentView: View {
             
             addButton
         }
-        .navigationTitle("Gizli Kasamız")
+        .navigationTitle("özelimizzz")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingAddSheet) {
             AddSecretMediaView()
@@ -212,7 +212,7 @@ struct SecretVaultContentView: View {
                     .font(.title3)
                     .fontWeight(.bold)
                 
-                Text("Sadece ikimizin bildiği fotoğraf ve videolar")
+                Text("aşkımla özelimizz")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -232,11 +232,11 @@ struct SecretVaultContentView: View {
                     .font(.system(size: 48))
                     .foregroundColor(.secondary.opacity(0.7))
                 
-                Text("Henüz gizli bir medya eklemediniz.")
+                Text("şu an özell şeyler ekli değill")
                     .font(.headline)
                     .foregroundColor(.primary)
                 
-                Text("Sadece ikimize özel fotoğraf ve videoları buraya yükleyebiliriz.")
+                Text("özellll")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -245,7 +245,7 @@ struct SecretVaultContentView: View {
                 Button {
                     showingAddSheet = true
                 } label: {
-                    Label("İlk Medyayı Ekle", systemImage: "plus.circle.fill")
+                    Label("ilk özel foto ekle", systemImage: "plus.circle.fill")
                         .font(.headline)
                         .foregroundColor(.white)
                         .padding(.horizontal, 24)
@@ -353,7 +353,7 @@ struct SecretVaultView: View {
             case .setup:
                 lockedBackground {
                     PINEntryView(
-                        title: "Gizli Kasayı Kur",
+                        title: "özel sayfayı kur",
                         subtitle: "Kasayı açmak için 4 haneli bir PIN belirleyelim.",
                         errorMessage: errorMessage,
                         primaryColor: themeManager.currentTheme.primaryColor,
@@ -396,7 +396,7 @@ struct SecretVaultView: View {
             case .enter:
                 lockedBackground {
                     PINEntryView(
-                        title: "Gizli Kasayı Aç",
+                        title: "özel sayfayı aç",
                         subtitle: "Belirlediğin 4 haneli PIN'i gir.",
                         errorMessage: errorMessage,
                         primaryColor: themeManager.currentTheme.primaryColor,
