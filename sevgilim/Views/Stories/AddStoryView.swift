@@ -16,6 +16,7 @@ struct AddStoryView: View {
     @State private var showingImagePicker = false
     @State private var showingCamera = false
     @State private var showingSourceOptions = false
+    @State private var showingEditor = false
     @StateObject private var uploadState = UploadState(message: "Story yükleniyor...")
     
     var body: some View {
@@ -62,7 +63,7 @@ struct AddStoryView: View {
                     
                     // Image Preview or Picker Button
                     if let image = selectedImage {
-                        // Image Preview
+                        // Image Preview with overlay buttons
                         VStack(spacing: 16) {
                             ZStack {
                                 Image(uiImage: image)
@@ -72,11 +73,12 @@ struct AddStoryView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 20))
                                     .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
                                 
-                                // Change Photo Button
+                                // Overlay: change photo & edit buttons side by side
                                 VStack {
-                                    HStack {
+                                    HStack(spacing: 12) {
                                         Spacer()
                                         
+                                        // Change Photo Button
                                         Button(action: { showingSourceOptions = true }) {
                                             Image(systemName: "photo.badge.plus")
                                                 .font(.system(size: 18))
@@ -85,7 +87,17 @@ struct AddStoryView: View {
                                                 .background(.ultraThinMaterial)
                                                 .clipShape(Circle())
                                         }
-                                        .padding(12)
+                                        .disabled(uploadState.isUploading)
+                                        
+                                        // Edit Button
+                                        Button(action: { showingEditor = true }) {
+                                            Image(systemName: "pencil.and.outline")
+                                                .font(.system(size: 18))
+                                                .foregroundColor(.white)
+                                                .frame(width: 40, height: 40)
+                                                .background(.ultraThinMaterial)
+                                                .clipShape(Circle())
+                                        }
                                         .disabled(uploadState.isUploading)
                                     }
                                     
@@ -230,6 +242,12 @@ struct AddStoryView: View {
             } message: {
                 Text(uploadState.errorMessage ?? "")
             }
+            // Editör sayfasını buradan açıyoruz
+            .sheet(isPresented: $showingEditor) {
+                if selectedImage != nil {
+                    StoryEditorView(image: $selectedImage)
+                }
+            }
         }
         .navigationViewStyle(StackNavigationViewStyle())
     }
@@ -245,7 +263,7 @@ struct AddStoryView: View {
         }
         
         uploadState.start(message: "Story yükleniyor...")
-
+        
         Task {
             do {
                 _ = try await storyService.uploadStory(
@@ -262,7 +280,7 @@ struct AddStoryView: View {
                 }
             } catch {
                 await MainActor.run {
-                    uploadState.fail(with: "Story yüklenirken hata oluştu: \(error.localizedDescription)")
+                    uploadState.fail(with: "Story yüklenirken hata oluştu: \\(error.localizedDescription)")
                 }
             }
         }
