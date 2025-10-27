@@ -32,6 +32,9 @@ struct StoryViewer: View {
     @State private var showingMessageInput = false
     @State private var messageText = ""
     @State private var isVideoReady = false
+    @State private var showVideoPlaceholder = false
+    @State private var videoPlaceholderTask: Task<Void, Never>?
+    @State private var videoLoadStartTime: Date? = nil
     
     private let photoDuration: TimeInterval = 5 // Fotoğraflar için 5 saniye
     
@@ -122,7 +125,7 @@ struct StoryViewer: View {
                                     }
                             }
                             
-                            if let image = cachedImage, !isVideoReady {
+                            if let image = cachedImage, showVideoPlaceholder {
                                 Image(uiImage: image)
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
@@ -461,6 +464,10 @@ struct StoryViewer: View {
         isPaused = false
         progress = 0
         isVideoReady = false
+        showVideoPlaceholder = false
+        videoPlaceholderTask?.cancel()
+        videoPlaceholderTask = nil
+        videoLoadStartTime = nil
         loadCurrentStory()
     }
     
@@ -572,6 +579,10 @@ struct StoryViewer: View {
         guard let story = currentStory else {
             cachedImage = nil
             isLoading = false
+            showVideoPlaceholder = false
+            videoPlaceholderTask?.cancel()
+            videoPlaceholderTask = nil
+            videoLoadStartTime = nil
             return
         }
         
@@ -581,6 +592,22 @@ struct StoryViewer: View {
         
         if story.isVideo {
             isVideoReady = false
+            showVideoPlaceholder = false
+            videoPlaceholderTask?.cancel()
+            videoLoadStartTime = Date()
+            let placeholderStoryId = targetStoryId
+            videoPlaceholderTask = Task {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                if Task.isCancelled { return }
+                await MainActor.run {
+                    guard placeholderStoryId == currentStory?.id else { return }
+                    guard !isVideoReady else { return }
+                    if let start = videoLoadStartTime, Date().timeIntervalSince(start) >= 0.5 {
+                        showVideoPlaceholder = true
+                    }
+                    videoPlaceholderTask = nil
+                }
+            }
             if let thumbnailURL = story.thumbnailURL {
                 Task {
                     if let image = try? await ImageCacheService.shared.loadImage(from: thumbnailURL, thumbnail: false) {
@@ -607,8 +634,25 @@ struct StoryViewer: View {
                         guard targetStoryId == currentStory?.id else { return }
                         isLoading = false
                         isVideoReady = false
+                        showVideoPlaceholder = false
+                        videoPlaceholderTask?.cancel()
+                        videoPlaceholderTask = nil
+                        videoLoadStartTime = nil
                     }
                     return
+                }
+                
+                let needsThumbnail = await MainActor.run {
+                    cachedImage == nil
+                }
+                
+                if needsThumbnail {
+                    if let generatedThumbnail = await generateLocalThumbnail(for: preparedURL) {
+                        await MainActor.run {
+                            guard targetStoryId == currentStory?.id else { return }
+                            cachedImage = generatedThumbnail
+                        }
+                    }
                 }
                 
                 let asset = AVURLAsset(url: preparedURL)
@@ -631,6 +675,10 @@ struct StoryViewer: View {
                 }
             }
         } else {
+            showVideoPlaceholder = false
+            videoPlaceholderTask?.cancel()
+            videoPlaceholderTask = nil
+            videoLoadStartTime = nil
             Task {
                 do {
                     let image = try await ImageCacheService.shared.loadImage(from: story.photoURL, thumbnail: false)
@@ -664,8 +712,12 @@ struct StoryViewer: View {
         progress = 0
         
         if player.currentItem?.status == .readyToPlay && !isVideoReady {
+            videoPlaceholderTask?.cancel()
+            videoPlaceholderTask = nil
+            showVideoPlaceholder = false
             isVideoReady = true
             isLoading = false
+            videoLoadStartTime = nil
         }
         
         let duration = max(currentMediaDuration, 0.1)
@@ -677,8 +729,12 @@ struct StoryViewer: View {
             let elapsed = CMTimeGetSeconds(time)
             if elapsed.isFinite, duration > 0 {
                 if !self.isVideoReady {
+                    self.videoPlaceholderTask?.cancel()
+                    self.videoPlaceholderTask = nil
+                    self.showVideoPlaceholder = false
                     self.isVideoReady = true
                     self.isLoading = false
+                    self.videoLoadStartTime = nil
                 }
                 self.progress = CGFloat(min(elapsed / duration, 1.0))
             }
@@ -689,12 +745,32 @@ struct StoryViewer: View {
             object: player.currentItem,
             queue: .main
         ) { _ in
+            self.videoLoadStartTime = nil
             self.progress = 1.0
             self.nextStory()
         }
         
         if !isPaused {
             player.play()
+        }
+    }
+    
+    private func generateLocalThumbnail(for url: URL) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            let asset = AVAsset(url: url)
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            let time = CMTime(seconds: 0.1, preferredTimescale: 600)
+            
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let cgImage = try generator.copyCGImage(at: time, actualTime: nil)
+                    let image = UIImage(cgImage: cgImage)
+                    continuation.resume(returning: image)
+                } catch {
+                    continuation.resume(returning: nil)
+                }
+            }
         }
     }
     
@@ -717,6 +793,10 @@ struct StoryViewer: View {
         removeVideoObservers()
         videoPlayer = nil
         isVideoReady = false
+        showVideoPlaceholder = false
+        videoPlaceholderTask?.cancel()
+        videoPlaceholderTask = nil
+        videoLoadStartTime = nil
     }
     
     // MARK: - Mark as Viewed

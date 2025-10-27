@@ -37,19 +37,28 @@ struct VideoPicker: UIViewControllerRepresentable {
         }
         
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            parent.dismiss()
-            
-            guard let provider = results.first?.itemProvider else { return }
-            
-            let supportedTypes: [UTType] = [.movie, .video, .mpeg4Movie]
-            guard let matchedType = supportedTypes.first(where: { provider.hasItemConformingToTypeIdentifier($0.identifier) }) else {
+            guard let provider = results.first?.itemProvider else {
+                DispatchQueue.main.async {
+                    self.parent.dismiss()
+                }
                 return
             }
             
-            provider.loadFileRepresentation(forTypeIdentifier: matchedType.identifier) { [weak self] url, error in
-                guard let self, let sourceURL = url, error == nil else {
+            let supportedTypes: [UTType] = [.movie, .video, .mpeg4Movie]
+            guard let matchedType = supportedTypes.first(where: { provider.hasItemConformingToTypeIdentifier($0.identifier) }) else {
+                DispatchQueue.main.async {
+                    self.parent.dismiss()
+                }
+                return
+            }
+            
+            provider.loadFileRepresentation(forTypeIdentifier: matchedType.identifier) { url, error in
+                guard let sourceURL = url, error == nil else {
                     if let error {
                         print("❌ Video picker load error: \(error.localizedDescription)")
+                    }
+                    DispatchQueue.main.async {
+                        self.parent.dismiss()
                     }
                     return
                 }
@@ -65,9 +74,13 @@ struct VideoPicker: UIViewControllerRepresentable {
                     
                     DispatchQueue.main.async {
                         self.parent.videoURL = tempURL
+                        self.parent.dismiss()
                     }
                 } catch {
                     print("❌ Video picker copy error: \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        self.parent.dismiss()
+                    }
                 }
             }
         }
