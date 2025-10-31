@@ -1085,7 +1085,7 @@ struct AddSecretMediaView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Başlık (İsteğe Bağlı)")
                     .font(.headline)
-                TextField("Sadece ikimizin bildiği kod ad", text: $title)
+                TextField(".", text: $title)
                     .textFieldStyle(.roundedBorder)
             }
             

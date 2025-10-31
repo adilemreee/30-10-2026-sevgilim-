@@ -15,6 +15,7 @@ struct StoryEditorView: View {
     @State private var selectedColorId: String = PaletteEntry.presets.first?.id ?? "white"
     @State private var strokeWidth: Double = 6
     @State private var isEraserActive = false
+    @State private var areControlsCollapsed = false
 
     private let palette = PaletteEntry.presets
     private let minStrokeWidth: Double = 2
@@ -144,22 +145,63 @@ struct StoryEditorView: View {
     }
 
     private func bottomControls(bottomInset: CGFloat) -> some View {
-        VStack(spacing: 16) {
-            brushSelectionRow
-            strokeSliderRow
-            colorPaletteRow
-            actionRow
+        Group {
+            if areControlsCollapsed {
+                collapseToggleButton(compact: true)
+            } else {
+                VStack(spacing: 16) {
+                    collapseToggleButton(compact: false)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .transition(.opacity)
+
+                    brushSelectionRow
+                    strokeSliderRow
+                    colorPaletteRow
+                    actionRow
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, max(bottomInset + 6, 22))
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.4), radius: 22, x: 0, y: 14)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 18)
-        .padding(.bottom, max(bottomInset + 6, 22))
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 32, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.4), radius: 22, x: 0, y: 14)
+        .frame(maxWidth: areControlsCollapsed ? 220 : .infinity)
+    }
+
+    private func collapseToggleButton(compact: Bool) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85, blendDuration: 0.2)) {
+                areControlsCollapsed.toggle()
+            }
+        } label: {
+            HStack(spacing: compact ? 6 : 8) {
+                Image(systemName: areControlsCollapsed ? "chevron.up" : "chevron.down")
+                    .font(.system(size: compact ? 14 : 15, weight: .semibold))
+                Text(areControlsCollapsed ? "Araçları Göster" : "Araçları Gizle")
+                    .font(compact ? .caption2 : .caption)
+                    .fontWeight(.semibold)
+            }
+            .padding(.vertical, compact ? 6 : 8)
+            .padding(.horizontal, compact ? 12 : 14)
+            .foregroundColor(.white.opacity(0.92))
+            .background(
+                Capsule()
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(compact ? 0.26 : 0.18), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(compact ? 0.38 : 0.12), radius: compact ? 14 : 6, x: 0, y: compact ? 6 : 2)
+        }
+        .buttonStyle(.plain)
     }
 
     private var brushSelectionRow: some View {

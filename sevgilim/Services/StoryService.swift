@@ -90,9 +90,11 @@ class StoryService: ObservableObject {
         let story: Story
         
         if let image = image {
+            let optimizedImage = image.preparedForStoryUpload()
+
             // Fotoğraf upload
-            let photoURL = try await uploadStoryImage(image: image, relationshipId: relationshipId, userId: userId)
-            let thumbnailURL = try? await uploadStoryThumbnail(image: image, relationshipId: relationshipId, userId: userId)
+            let photoURL = try await uploadStoryImage(image: optimizedImage, relationshipId: relationshipId, userId: userId)
+            let thumbnailURL = try? await uploadStoryThumbnail(image: optimizedImage, relationshipId: relationshipId, userId: userId)
             
             story = Story(
                 photoURL: photoURL,
@@ -142,7 +144,7 @@ class StoryService: ObservableObject {
     // Story fotoğrafını upload et
     private func uploadStoryImage(image: UIImage, relationshipId: String, userId: String) async throws -> String {
         // Resmi optimize et
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+        guard let imageData = image.jpegData(compressionQuality: 0.82) else {
             throw NSError(domain: "StoryService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Resim verisi oluşturulamadı"])
         }
         
