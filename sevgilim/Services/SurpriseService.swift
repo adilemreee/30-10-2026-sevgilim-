@@ -117,11 +117,7 @@ class SurpriseService: ObservableObject {
     
     func updateManualHiddenStatus(for surprise: Surprise, hidden: Bool) async throws {
         guard let id = surprise.id else { return }
-        guard !surprise.isOpened else {
-            print("⚠️ Attempted to hide an already opened surprise. Ignoring.")
-            return
-        }
-        
+
         try await db.collection("surprises").document(id).updateData([
             "isManuallyHidden": hidden
         ])

@@ -17,18 +17,12 @@ struct NotificationsView: View {
     @EnvironmentObject private var songService: SongService
     @EnvironmentObject private var storyService: StoryService
     @EnvironmentObject private var messageService: MessageService
+    @EnvironmentObject private var surpriseService: SurpriseService
+    @EnvironmentObject private var specialDayService: SpecialDayService
+    @EnvironmentObject private var secretVaultService: SecretVaultService
     
-    @State private var selectedTab: NotificationTab = .partnerActivity
     @State private var hasStartedMessageListener = false
-    @AppStorage("partnerNotificationsClearedAt") private var partnerNotificationsClearedTimestamp: Double = 0
-    @AppStorage("storyNotificationsClearedAt") private var storyNotificationsClearedTimestamp: Double = 0
-    
-    private enum NotificationTab: String, CaseIterable, Identifiable {
-        case partnerActivity = "Aşkınınn Hareketleri"
-        case storyInteractions = "Story Bildirimleri"
-        
-        var id: String { rawValue }
-    }
+    @AppStorage("notificationsClearedAt") private var notificationsClearedTimestamp: Double = 0
     
     var body: some View {
         VStack(spacing: 20) {
@@ -44,13 +38,7 @@ struct NotificationsView: View {
                 Spacer()
                 if hasAnyNotifications {
                     Button("Temizle") {
-                        let now = Date().timeIntervalSince1970
-                        switch selectedTab {
-                        case .partnerActivity:
-                            partnerNotificationsClearedTimestamp = now
-                        case .storyInteractions:
-                            storyNotificationsClearedTimestamp = now
-                        }
+                        notificationsClearedTimestamp = Date().timeIntervalSince1970
                     }
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -59,40 +47,17 @@ struct NotificationsView: View {
             }
             .padding(.horizontal)
             
-            Picker("Kategori", selection: $selectedTab) {
-                ForEach(NotificationTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    switch selectedTab {
-                    case .partnerActivity:
-                        if partnerActivityItems.isEmpty {
-                            EmptyNotificationState(
-                                systemImage: "square.and.pencil.circle",
-                                title: "Şimdilik Bildirim Yok",
-                                message: "aşkınıızzz bir şeyler eklemedi...."
-                            )
-                        } else {
-                            ForEach(partnerActivityItems) { item in
-                                NotificationRow(item: item)
-                            }
-                        }
-                    case .storyInteractions:
-                        if storyInteractionItems.isEmpty {
-                            EmptyNotificationState(
-                                systemImage: "sparkles.rectangle.stack",
-                                title: "Story Etkileşimi Yok",
-                                message: "Story beğenileri ve yanıtlarıı..."
-                            )
-                        } else {
-                            ForEach(storyInteractionItems) { item in
-                                NotificationRow(item: item)
-                            }
+                    if notificationItems.isEmpty {
+                        EmptyNotificationState(
+                            systemImage: "bell.slash",
+                            title: "Şimdilik Bildirim Yok",
+                            message: "Mesajlar dışında yeni bir aktivite olursa burada göreceksin."
+                        )
+                    } else {
+                        ForEach(notificationItems) { item in
+                            NotificationRow(item: item)
                         }
                     }
                 }
@@ -105,21 +70,27 @@ struct NotificationsView: View {
         }
     }
     
-    private var partnerClearedDate: Date {
-        Date(timeIntervalSince1970: partnerNotificationsClearedTimestamp)
-    }
-    
-    private var storyClearedDate: Date {
-        Date(timeIntervalSince1970: storyNotificationsClearedTimestamp)
-    }
-    
     private var hasAnyNotifications: Bool {
-        switch selectedTab {
-        case .partnerActivity:
-            return !partnerActivityItems.isEmpty
-        case .storyInteractions:
-            return !storyInteractionItems.isEmpty
-        }
+        !notificationItems.isEmpty
+    }
+    
+    private var clearedDate: Date {
+        Date(timeIntervalSince1970: notificationsClearedTimestamp)
+    }
+    
+    private var notificationItems: [NotificationItem] {
+        var items: [NotificationItem] = []
+        items.append(contentsOf: partnerActivityItems)
+        items.append(contentsOf: storyInteractionItems)
+        items.append(contentsOf: surpriseItems)
+        items.append(contentsOf: specialDayItems)
+        items.append(contentsOf: secretVaultItems)
+        
+        return items
+            .filter { $0.timestamp > clearedDate }
+            .sorted { $0.timestamp > $1.timestamp }
+            .prefix(50)
+            .map { $0 }
     }
     
     private func startMessageListenerIfNeeded() async {
@@ -244,12 +215,7 @@ struct NotificationsView: View {
         items.append(contentsOf: songs)
         items.append(contentsOf: stories)
         
-        items = items.filter { $0.timestamp > partnerClearedDate }
-        
         return items
-            .sorted { $0.timestamp > $1.timestamp }
-            .prefix(30)
-            .map { $0 }
     }
     
     private var storyInteractionItems: [NotificationItem] {
@@ -278,7 +244,7 @@ struct NotificationsView: View {
                     thumbnailURL: story.thumbnailURL ?? story.photoURL
                 )
             }
-        
+       
         let storyReplies = messageService.messages
             .filter { $0.senderId == partnerId && $0.storyImageURL != nil }
             .map {
@@ -294,16 +260,105 @@ struct NotificationsView: View {
                     thumbnailURL: $0.storyImageURL
                 )
             }
-        
+       
         items.append(contentsOf: likedStories)
         items.append(contentsOf: storyReplies)
         
-        items = items.filter { $0.timestamp > storyClearedDate }
-        
         return items
-            .sorted { $0.timestamp > $1.timestamp }
-            .prefix(30)
-            .map { $0 }
+    }
+    
+    private var surpriseItems: [NotificationItem] {
+        guard
+            let currentUser = authService.currentUser,
+            let relationship = relationshipService.currentRelationship,
+            let currentUserId = currentUser.id else {
+            return []
+        }
+        
+        let partnerId = relationship.partnerId(for: currentUserId)
+        let partnerName = relationship.partnerName(for: currentUserId)
+        
+        return surpriseService.surprises
+            .filter { $0.createdBy == partnerId }
+            .map { surprise in
+                let status: String
+                if surprise.isManuallyHidden {
+                    status = "Sürpriz hazır ama şu an gizli tutuluyor."
+                } else if surprise.isOpened, let openedAt = surprise.openedAt {
+                    status = "Sürprizi \(openedAt.formatted(date: .omitted, time: .shortened)) tarihinde açtın."
+                } else if surprise.shouldReveal {
+                    status = "Sürpriz hazır, açabilirsin!"
+                } else {
+                    let revealText = surprise.revealDate.formatted(date: .abbreviated, time: .shortened)
+                    status = "Açılma zamanı: \(revealText)"
+                }
+                
+                return NotificationItem(
+                    title: "\(partnerName) sana sürpriz hazırladı",
+                    message: status,
+                    iconName: "gift.fill",
+                    timestamp: surprise.createdAt,
+                    thumbnailURL: surprise.photoURL
+                )
+            }
+    }
+    
+    private var specialDayItems: [NotificationItem] {
+        guard
+            let currentUser = authService.currentUser,
+            let relationship = relationshipService.currentRelationship,
+            let currentUserId = currentUser.id else {
+            return []
+        }
+        
+        let partnerId = relationship.partnerId(for: currentUserId)
+        let partnerName = relationship.partnerName(for: currentUserId)
+        
+        return specialDayService.specialDays
+            .filter { $0.createdBy == partnerId }
+            .map { day in
+                let dateText = day.date.formatted(date: .long, time: .omitted)
+                return NotificationItem(
+                    title: "\(partnerName) özel gün ekledi",
+                    message: "\"\(day.title)\" - \(dateText)",
+                    iconName: "calendar.badge.heart",
+                    timestamp: day.createdAt ?? day.date
+                )
+            }
+    }
+    
+    private var secretVaultItems: [NotificationItem] {
+        guard
+            let currentUser = authService.currentUser,
+            let relationship = relationshipService.currentRelationship,
+            let currentUserId = currentUser.id else {
+            return []
+        }
+        
+        let partnerId = relationship.partnerId(for: currentUserId)
+        let partnerName = relationship.partnerName(for: currentUserId)
+        
+        return secretVaultService.items
+            .filter { $0.uploadedBy == partnerId }
+            .map { item in
+                let mediaType = item.isVideo ? "video" : "fotoğraf"
+                let detail: String
+                if let title = item.title, !title.isEmpty {
+                    detail = "\"\(title)\" \(mediaType) ekledi."
+                } else if let note = item.note, !note.isEmpty {
+                    detail = "\(mediaType.capitalized) notu: \(note)"
+                } else {
+                    detail = "Gizli kasaya yeni bir \(mediaType) ekledi."
+                }
+                
+                return NotificationItem(
+                    title: "\(partnerName) gizli kasaya içerik ekledi",
+                    message: detail,
+                    iconName: item.isVideo ? "lock.rectangle.on.rectangle" : "lock.square.stack",
+                    timestamp: item.createdAt,
+                    thumbnailURL: item.thumbnailURL ?? (item.isVideo ? nil : item.downloadURL)
+                )
+            }
     }
 }
 

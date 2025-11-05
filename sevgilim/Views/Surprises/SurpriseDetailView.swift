@@ -259,7 +259,7 @@ struct SurpriseDetailView: View {
                 .padding(.top, 10)
             }
             
-            if isCreatedByCurrentUser && !surprise.isOpened {
+            if isCreatedByCurrentUser {
                 Button(action: { toggleManualHidden(for: surprise) }) {
                     HStack(spacing: 6) {
                         if isUpdatingVisibility {
@@ -291,7 +291,7 @@ struct SurpriseDetailView: View {
                 .disabled(isUpdatingVisibility)
             }
             
-            if isCreatedByCurrentUser && surprise.isManuallyHidden && !surprise.isOpened {
+            if isCreatedByCurrentUser && surprise.isManuallyHidden {
                 HStack(spacing: 6) {
                     Image(systemName: "info.circle.fill")
                         .foregroundColor(.yellow)
@@ -526,7 +526,6 @@ struct SurpriseDetailView: View {
     
     private func toggleManualHidden(for surprise: Surprise) {
         guard !isUpdatingVisibility else { return }
-        guard !surprise.isOpened else { return }
         
         let newHidden = !surprise.isManuallyHidden
         isUpdatingVisibility = true

@@ -37,10 +37,10 @@ struct Surprise: Identifiable, Codable {
     
     // Sürprizin kilitli olup olmadığını kontrol et
     var isLocked: Bool {
-        guard !isOpened else { return false }
         if isManuallyHidden {
             return true
         }
+        guard !isOpened else { return false }
         return Date() < revealDate
     }
     

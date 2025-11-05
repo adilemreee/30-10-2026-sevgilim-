@@ -75,7 +75,7 @@ struct SurpriseCardView: View {
             
             // Message
             VStack(spacing: 8) {
-                Text(surprise.isManuallyHidden ? "Sürprizi hazırlayan henüz paylaşmak istemiyor." : "İçeriği görmek için zamanı bekle!")
+                Text(surprise.isManuallyHidden ? "Aşkım biraz daha kudurabilirsin" : "İçeriği görmek için zamanı bekle!")
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.8))
                     .padding(.top, 12)
@@ -237,7 +237,7 @@ struct SurpriseCardView: View {
                 
                 Spacer()
                 
-                if isCreatedByCurrentUser && !surprise.isOpened {
+                if isCreatedByCurrentUser {
                     Button(action: toggleManualHidden) {
                         HStack(spacing: 4) {
                             if isUpdatingVisibility {
@@ -311,7 +311,7 @@ struct SurpriseCardView: View {
             
             // Content area
             VStack(alignment: .leading, spacing: 10) {
-                if !isCreatedByCurrentUser && !surprise.isOpened {
+                if !isCreatedByCurrentUser && (!surprise.isOpened || surprise.isManuallyHidden) {
                     // Henüz açılmamış - mesajı gösterme
                     EmptyView()
                 } else {
@@ -350,7 +350,7 @@ struct SurpriseCardView: View {
                     }
                 }
                 
-                if isCreatedByCurrentUser && surprise.isManuallyHidden && !surprise.isOpened {
+                if isCreatedByCurrentUser && surprise.isManuallyHidden {
                     HStack(spacing: 6) {
                         Image(systemName: "eye.slash.fill")
                             .font(.caption)
