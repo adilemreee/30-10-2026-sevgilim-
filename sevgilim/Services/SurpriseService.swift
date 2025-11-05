@@ -79,7 +79,8 @@ class SurpriseService: ObservableObject {
             createdFor: createdFor,
             createdAt: Date(),
             isOpened: false,
-            openedAt: nil
+            openedAt: nil,
+            isManuallyHidden: false
         )
         
         try db.collection("surprises").addDocument(from: surprise)
@@ -99,14 +100,33 @@ class SurpriseService: ObservableObject {
     }
     
     func markAsOpened(_ surprise: Surprise) async throws {
+        guard !surprise.isManuallyHidden else {
+            print("⚠️ Surprise is manually hidden. Cannot mark as opened.")
+            return
+        }
         guard let id = surprise.id else { return }
         
         try await db.collection("surprises").document(id).updateData([
             "isOpened": true,
-            "openedAt": Timestamp(date: Date())
+            "openedAt": Timestamp(date: Date()),
+            "isManuallyHidden": false
         ])
         
         print("🎉 Surprise opened!")
+    }
+    
+    func updateManualHiddenStatus(for surprise: Surprise, hidden: Bool) async throws {
+        guard let id = surprise.id else { return }
+        guard !surprise.isOpened else {
+            print("⚠️ Attempted to hide an already opened surprise. Ignoring.")
+            return
+        }
+        
+        try await db.collection("surprises").document(id).updateData([
+            "isManuallyHidden": hidden
+        ])
+        
+        print(hidden ? "🔒 Surprise manually hidden." : "🔓 Surprise re-enabled.")
     }
     
     // MARK: - Storage Operations

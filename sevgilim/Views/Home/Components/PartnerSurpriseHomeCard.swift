@@ -76,34 +76,36 @@ struct PartnerSurpriseHomeCard: View {
             HStack(spacing: 4) {
                 Image(systemName: "lock.fill")
                     .font(.caption)
-                Text("İçeriği görmek için zamanı bekle!")
+                Text(surprise.isManuallyHidden ? "Sürprizi hazırlayan henüz paylaşmak istemiyor." : "İçeriği görmek için zamanı bekle!")
                     .font(.caption)
             }
             .foregroundColor(.white.opacity(0.7))
             .padding(.top, 12)
             
-            Text("Açılışa Kalan Süre")
-                .font(.caption2)
-                .foregroundColor(.white.opacity(0.6))
-                .padding(.top, 4)
-            
-            // Kompakt geri sayım
-            HStack(spacing: 12) {
-                TimeUnitCompactSmall(value: days, unit: "Gün")
-                Text(":")
-                    .foregroundColor(.white.opacity(0.5))
-                    .font(.title3)
-                TimeUnitCompactSmall(value: hours, unit: "Saat")
-                Text(":")
-                    .foregroundColor(.white.opacity(0.5))
-                    .font(.title3)
-                TimeUnitCompactSmall(value: minutes, unit: "Dk")
-                Text(":")
-                    .foregroundColor(.white.opacity(0.5))
-                    .font(.title3)
-                TimeUnitCompactSmall(value: seconds, unit: "Sn")
+            if !surprise.isManuallyHidden {
+                Text("Açılışa Kalan Süre")
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.top, 4)
+                
+                // Kompakt geri sayım
+                HStack(spacing: 12) {
+                    TimeUnitCompactSmall(value: days, unit: "Gün")
+                    Text(":")
+                        .foregroundColor(.white.opacity(0.5))
+                        .font(.title3)
+                    TimeUnitCompactSmall(value: hours, unit: "Saat")
+                    Text(":")
+                        .foregroundColor(.white.opacity(0.5))
+                        .font(.title3)
+                    TimeUnitCompactSmall(value: minutes, unit: "Dk")
+                    Text(":")
+                        .foregroundColor(.white.opacity(0.5))
+                        .font(.title3)
+                    TimeUnitCompactSmall(value: seconds, unit: "Sn")
+                }
+                .padding(.vertical, 8)
             }
-            .padding(.vertical, 8)
         }
         .padding(.bottom, 16)
     }
@@ -149,7 +151,7 @@ struct PartnerSurpriseHomeCard: View {
     // MARK: - Functions
     
     private func setupTimer() {
-        timeRemaining = surprise.timeRemaining
+        timeRemaining = max(0, surprise.timeRemaining)
         
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             if timeRemaining > 0 {

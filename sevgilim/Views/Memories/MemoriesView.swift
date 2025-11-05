@@ -367,6 +367,8 @@ struct MemoryDetailView: View {
     @State private var commentError: String?
     @State private var isShowingPhotoViewer = false
     @State private var photoViewerIndex = 0
+    @State private var commentToDelete: Comment?
+    @State private var isDeletingComment = false
     @StateObject private var singlePhotoService = PhotoService()
     
     // Get current memory from service for live updates
@@ -532,6 +534,18 @@ struct MemoryDetailView: View {
                                             Text(comment.createdAt.timeAgo())
                                                 .font(.caption2)
                                                 .foregroundColor(.secondary)
+                                            Spacer()
+                                            if canDeleteComment(comment) {
+                                                Button {
+                                                    commentToDelete = comment
+                                                } label: {
+                                                    Image(systemName: "trash")
+                                                        .font(.caption)
+                                                        .foregroundColor(.red.opacity(0.8))
+                                                }
+                                                .buttonStyle(.plain)
+                                                .disabled(isDeletingComment)
+                                            }
                                         }
                                         Text(comment.text)
                                             .font(.caption)
@@ -552,6 +566,7 @@ struct MemoryDetailView: View {
                                     .lineLimit(1...4)
                                     .textFieldStyle(.roundedBorder)
                                     .submitLabel(.send)
+                                    .disabled(isDeletingComment)
                                     .onSubmit(addComment)
                                 
                                 Button(action: addComment) {
@@ -565,7 +580,7 @@ struct MemoryDetailView: View {
                                     }
                                 }
                                 .buttonStyle(.plain)
-                                .disabled(isSubmittingComment || trimmedCommentText().isEmpty)
+                                .disabled(isSubmittingComment || trimmedCommentText().isEmpty || isDeletingComment)
                             }
                             .padding(.top, 4)
                         }
@@ -592,6 +607,29 @@ struct MemoryDetailView: View {
         .onDisappear {
             singlePhotoService.photos = []
         }
+        .confirmationDialog(
+            "Yorumu Sil",
+            isPresented: Binding(
+                get: { commentToDelete != nil },
+                set: { newValue in
+                    if !newValue {
+                        commentToDelete = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Yorumu Sil", role: .destructive) {
+                guard let comment = commentToDelete else { return }
+                commentToDelete = nil
+                deleteComment(comment)
+            }
+            Button("İptal", role: .cancel) {
+                commentToDelete = nil
+            }
+        } message: {
+            Text("Bu yorumu silmek istediğinizden emin misiniz?")
+        }
         .fullScreenCover(isPresented: $isShowingPhotoViewer) {
             FullScreenPhotoViewer(currentIndex: $photoViewerIndex) {
                 isShowingPhotoViewer = false
@@ -616,6 +654,11 @@ struct MemoryDetailView: View {
         return currentMemory.likes.contains(userId)
     }
     
+    private func canDeleteComment(_ comment: Comment) -> Bool {
+        guard let userId = authService.currentUser?.id else { return false }
+        return comment.userId == userId || currentMemory.createdBy == userId
+    }
+    
     private func toggleLike() {
         guard let userId = authService.currentUser?.id else { return }
         Task {
@@ -635,6 +678,7 @@ struct MemoryDetailView: View {
         }
         
         guard !isSubmittingComment,
+              !isDeletingComment,
               let userId = authService.currentUser?.id,
               let userName = authService.currentUser?.name else { return }
         
@@ -664,6 +708,29 @@ struct MemoryDetailView: View {
             
             await MainActor.run {
                 isSubmittingComment = false
+            }
+        }
+    }
+    
+    private func deleteComment(_ comment: Comment) {
+        guard !isDeletingComment else { return }
+        
+        Task {
+            await MainActor.run {
+                isDeletingComment = true
+                commentError = nil
+            }
+            
+            do {
+                try await memoryService.deleteComment(memory: currentMemory, comment: comment)
+            } catch {
+                await MainActor.run {
+                    commentError = "Yorum silinemedi: \(error.localizedDescription)"
+                }
+            }
+            
+            await MainActor.run {
+                isDeletingComment = false
             }
         }
     }

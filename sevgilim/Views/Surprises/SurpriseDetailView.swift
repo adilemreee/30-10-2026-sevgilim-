@@ -21,6 +21,11 @@ struct SurpriseDetailView: View {
     @State private var cachedImage: UIImage?
     @State private var isLoadingImage = false
     @State private var showFullScreenPhoto = false
+    @State private var isUpdatingVisibility = false
+    
+    private var currentSurprise: Surprise {
+        surpriseService.surprises.first(where: { $0.id == surprise.id }) ?? surprise
+    }
     
     var body: some View {
         NavigationView {
@@ -39,10 +44,10 @@ struct SurpriseDetailView: View {
                 ScrollView {
                     VStack(spacing: 25) {
                         // Durum Göstergesi
-                        if surprise.isLocked && !isCreatedByCurrentUser {
+                        if currentSurprise.isLocked && !isCreatedByCurrentUser {
                             // Kilitli Sürpriz
                             lockedContentView
-                        } else if surprise.shouldReveal && !surprise.isOpened && !isCreatedByCurrentUser {
+                        } else if currentSurprise.shouldReveal && !currentSurprise.isOpened && !isCreatedByCurrentUser {
                             // Açılmaya Hazır ama henüz açılmamış
                             readyButNotOpenedView
                         } else {
@@ -105,7 +110,8 @@ struct SurpriseDetailView: View {
     // MARK: - Kilitli İçerik
     
     private var lockedContentView: some View {
-        VStack(spacing: 25) {
+        let surprise = currentSurprise
+        return VStack(spacing: 25) {
             // İkon
             ZStack {
                 Circle()
@@ -125,7 +131,9 @@ struct SurpriseDetailView: View {
                 .foregroundColor(.primary)
             
             // Mesaj
-            Text("Bu sürpriz henüz kilitli. İçeriği görmek için belirlenen tarihi beklemen gerekiyor.")
+            Text(surprise.isManuallyHidden ?
+                 "Bu sürpriz şu an için gizlendi. İçeriğini görmek için biraz daha sabretmelisin." :
+                    "Bu sürpriz henüz kilitli. İçeriği görmek için belirlenen tarihi beklemen gerekiyor.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -145,34 +153,37 @@ struct SurpriseDetailView: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
             
             // Geri Sayım
-            VStack(spacing: 15) {
-                Text("Açılışa Kalan Süre")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                HStack(spacing: 20) {
-                    TimeUnitLarge(value: days, unit: "Gün")
-                    TimeUnitLarge(value: hours, unit: "Saat")
-                    TimeUnitLarge(value: minutes, unit: "Dakika")
-                    TimeUnitLarge(value: seconds, unit: "Saniye")
+            if !surprise.isManuallyHidden {
+                VStack(spacing: 15) {
+                    Text("Açılışa Kalan Süre")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    HStack(spacing: 20) {
+                        TimeUnitLarge(value: days, unit: "Gün")
+                        TimeUnitLarge(value: hours, unit: "Saat")
+                        TimeUnitLarge(value: minutes, unit: "Dakika")
+                        TimeUnitLarge(value: seconds, unit: "Saniye")
+                    }
+                    
+                    Text(surprise.revealDate, style: .date)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(surprise.revealDate, style: .time)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-                
-                Text(surprise.revealDate, style: .date)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(surprise.revealDate, style: .time)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                .padding(20)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
-            .padding(20)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
         }
     }
     
     // MARK: - Açılmaya Hazır ama Açılmamış
     
     private var readyButNotOpenedView: some View {
-        VStack(spacing: 25) {
+        let surprise = currentSurprise
+        return VStack(spacing: 25) {
             // İkon
             ZStack {
                 Circle()
@@ -232,7 +243,8 @@ struct SurpriseDetailView: View {
     // MARK: - Açık İçerik
     
     private var openContentView: some View {
-        VStack(spacing: 20) {
+        let surprise = currentSurprise
+        return VStack(spacing: 20) {
             // Durum İkonu
             if surprise.isOpened {
                 ZStack {
@@ -245,6 +257,50 @@ struct SurpriseDetailView: View {
                         .foregroundColor(.green)
                 }
                 .padding(.top, 10)
+            }
+            
+            if isCreatedByCurrentUser && !surprise.isOpened {
+                Button(action: { toggleManualHidden(for: surprise) }) {
+                    HStack(spacing: 6) {
+                        if isUpdatingVisibility {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(.white)
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: surprise.isManuallyHidden ? "eye.fill" : "eye.slash.fill")
+                                .font(.caption)
+                            Text(surprise.isManuallyHidden ? "Sürprizi Göster" : "Tekrar Gizle")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        LinearGradient(
+                            colors: [themeManager.currentTheme.primaryColor, themeManager.currentTheme.secondaryColor],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ).opacity(0.8)
+                    )
+                    .cornerRadius(12)
+                }
+                .buttonStyle(.plain)
+                .disabled(isUpdatingVisibility)
+            }
+            
+            if isCreatedByCurrentUser && surprise.isManuallyHidden && !surprise.isOpened {
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundColor(.yellow)
+                    Text("Bu sürpriz şu an manuel olarak gizlendi. Tekrar paylaşmak için \"Sürprizi Göster\"e dokun.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
             }
             
             // Başlık
@@ -426,6 +482,7 @@ struct SurpriseDetailView: View {
     
     private func setupTimer() {
         // İlk değeri hesapla
+        let surprise = currentSurprise
         timeRemaining = surprise.timeRemaining
         
         // Eğer süre dolmuş veya açılmışsa timer başlatma
@@ -434,9 +491,12 @@ struct SurpriseDetailView: View {
         timer = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
             .sink { _ in
-                let remaining = surprise.timeRemaining
-                if remaining > 0 && !surprise.isOpened {
+                let updated = currentSurprise
+                let remaining = updated.timeRemaining
+                if remaining > 0 && !updated.isOpened {
                     timeRemaining = remaining
+                } else {
+                    timer?.cancel()
                 }
             }
     }
@@ -444,7 +504,7 @@ struct SurpriseDetailView: View {
     // MARK: - Load Cached Image
     
     private func loadCachedImage() {
-        guard let photoURL = surprise.photoURL else { return }
+        guard let photoURL = currentSurprise.photoURL else { return }
         
         isLoadingImage = true
         
@@ -464,11 +524,31 @@ struct SurpriseDetailView: View {
         }
     }
     
+    private func toggleManualHidden(for surprise: Surprise) {
+        guard !isUpdatingVisibility else { return }
+        guard !surprise.isOpened else { return }
+        
+        let newHidden = !surprise.isManuallyHidden
+        isUpdatingVisibility = true
+        
+        Task {
+            do {
+                try await surpriseService.updateManualHiddenStatus(for: surprise, hidden: newHidden)
+            } catch {
+                print("❌ Error updating surprise visibility: \(error.localizedDescription)")
+            }
+            
+            await MainActor.run {
+                isUpdatingVisibility = false
+            }
+        }
+    }
+    
     // MARK: - Delete Surprise
     
     private func deleteSurprise() async {
         do {
-            try await surpriseService.deleteSurprise(surprise)
+            try await surpriseService.deleteSurprise(currentSurprise)
             dismiss()
         } catch {
             print("❌ Sürpriz silinirken hata: \(error.localizedDescription)")

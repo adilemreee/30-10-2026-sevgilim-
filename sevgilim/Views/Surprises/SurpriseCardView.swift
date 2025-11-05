@@ -11,6 +11,7 @@ struct SurpriseCardView: View {
     let isCreatedByCurrentUser: Bool
     let partnerName: String
     let onOpen: () -> Void
+    let onToggleManualHidden: (Bool) async -> Void
     
     @State private var timeRemaining: TimeInterval = 0
     @State private var showContent = false
@@ -21,6 +22,7 @@ struct SurpriseCardView: View {
     @State private var timer: AnyCancellable?
     @State private var cachedImage: UIImage?
     @State private var isLoadingImage = false
+    @State private var isUpdatingVisibility = false
     
     var body: some View {
         ZStack {
@@ -73,33 +75,35 @@ struct SurpriseCardView: View {
             
             // Message
             VStack(spacing: 8) {
-                Text("İçeriği görmek için zamanı bekle!")
+                Text(surprise.isManuallyHidden ? "Sürprizi hazırlayan henüz paylaşmak istemiyor." : "İçeriği görmek için zamanı bekle!")
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.8))
                     .padding(.top, 12)
                 
-                Text("Açılışa Kalan Süre")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.6))
-                    .padding(.top, 2)
-                
-                // Geri sayım
-                HStack(spacing: 12) {
-                    TimeUnitCompact(value: days, unit: "Gün")
-                    Text(":")
-                        .foregroundColor(.white.opacity(0.5))
-                        .font(.title3)
-                    TimeUnitCompact(value: hours, unit: "Saat")
-                    Text(":")
-                        .foregroundColor(.white.opacity(0.5))
-                        .font(.title3)
-                    TimeUnitCompact(value: minutes, unit: "Dk")
-                    Text(":")
-                        .foregroundColor(.white.opacity(0.5))
-                        .font(.title3)
-                    TimeUnitCompact(value: seconds, unit: "Sn")
+                if !surprise.isManuallyHidden {
+                    Text("Açılışa Kalan Süre")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                        .padding(.top, 2)
+                    
+                    // Geri sayım
+                    HStack(spacing: 12) {
+                        TimeUnitCompact(value: days, unit: "Gün")
+                        Text(":")
+                            .foregroundColor(.white.opacity(0.5))
+                            .font(.title3)
+                        TimeUnitCompact(value: hours, unit: "Saat")
+                        Text(":")
+                            .foregroundColor(.white.opacity(0.5))
+                            .font(.title3)
+                        TimeUnitCompact(value: minutes, unit: "Dk")
+                        Text(":")
+                            .foregroundColor(.white.opacity(0.5))
+                            .font(.title3)
+                        TimeUnitCompact(value: seconds, unit: "Sn")
+                    }
+                    .padding(.vertical, 12)
                 }
-                .padding(.vertical, 12)
             }
             .padding(.bottom, 16)
         }
@@ -233,10 +237,40 @@ struct SurpriseCardView: View {
                 
                 Spacer()
                 
+                if isCreatedByCurrentUser && !surprise.isOpened {
+                    Button(action: toggleManualHidden) {
+                        HStack(spacing: 4) {
+                            if isUpdatingVisibility {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .tint(.white)
+                                    .scaleEffect(0.5)
+                            } else {
+                                Image(systemName: surprise.isManuallyHidden ? "eye.fill" : "eye.slash.fill")
+                                    .font(.caption)
+                                Text(surprise.isManuallyHidden ? "Göster" : "Gizle")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.white.opacity(0.15))
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isUpdatingVisibility)
+                }
+                
                 if isCreatedByCurrentUser {
                     // Kilit durumu göstergesi
                     HStack(spacing: 4) {
-                        if surprise.isLocked {
+                        if surprise.isManuallyHidden {
+                            Image(systemName: "eye.slash.fill")
+                                .font(.caption)
+                                .foregroundColor(.red.opacity(0.9))
+                        } else if surprise.isLocked {
                             // Henüz kilitli
                             Image(systemName: "lock.fill")
                                 .font(.caption)
@@ -314,6 +348,17 @@ struct SurpriseCardView: View {
                             placeholderImage
                         }
                     }
+                }
+                
+                if isCreatedByCurrentUser && surprise.isManuallyHidden && !surprise.isOpened {
+                    HStack(spacing: 6) {
+                        Image(systemName: "eye.slash.fill")
+                            .font(.caption)
+                        Text("Bu sürpriz şu an manuel olarak gizli.")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.white.opacity(0.8))
+                    .padding(.top, 4)
                 }
                 
                 // Tarih bilgisi - sadece açılmamışsa göster
@@ -468,6 +513,19 @@ struct SurpriseCardView: View {
             
             // Backend'e açıldığını bildir
             onOpen()
+        }
+    }
+    
+    private func toggleManualHidden() {
+        guard !isUpdatingVisibility else { return }
+        let newHidden = !surprise.isManuallyHidden
+        isUpdatingVisibility = true
+        
+        Task {
+            await onToggleManualHidden(newHidden)
+            await MainActor.run {
+                isUpdatingVisibility = false
+            }
         }
     }
     

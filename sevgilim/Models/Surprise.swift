@@ -18,6 +18,7 @@ struct Surprise: Identifiable, Codable {
     var createdAt: Date
     var isOpened: Bool // Açıldı mı?
     var openedAt: Date? // Açıldığı an
+    var isManuallyHidden: Bool = false // Oluşturan tarafından elle gizlendi mi?
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -31,20 +32,29 @@ struct Surprise: Identifiable, Codable {
         case createdAt
         case isOpened
         case openedAt
+        case isManuallyHidden
     }
     
     // Sürprizin kilitli olup olmadığını kontrol et
     var isLocked: Bool {
-        return Date() < revealDate && !isOpened
+        guard !isOpened else { return false }
+        if isManuallyHidden {
+            return true
+        }
+        return Date() < revealDate
     }
     
     // Geri sayım için kalan süreyi hesapla
     var timeRemaining: TimeInterval {
-        return revealDate.timeIntervalSince(Date())
+        return max(0, revealDate.timeIntervalSince(Date()))
     }
     
     // Süre doldu mu?
     var shouldReveal: Bool {
-        return Date() >= revealDate && !isOpened
+        guard !isOpened else { return false }
+        if isManuallyHidden {
+            return false
+        }
+        return Date() >= revealDate
     }
 }

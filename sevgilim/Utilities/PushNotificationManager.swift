@@ -82,6 +82,7 @@ final class PushNotificationManager {
 
         Task {
             do {
+                try await detachTokenFromOtherUsers(token: token, currentUserId: userId)
                 try await db.collection("users").document(userId).setData([
                     "fcmTokens": FieldValue.arrayUnion([token]),
                     "fcmUpdatedAt": FieldValue.serverTimestamp()
@@ -118,6 +119,24 @@ final class PushNotificationManager {
                 ])
             } catch {
                 print("❌ Eski FCM token kaldırılamadı: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func detachTokenFromOtherUsers(token: String, currentUserId: String) async throws {
+        let snapshot = try await db.collection("users")
+            .whereField("fcmTokens", arrayContains: token)
+            .getDocuments()
+        
+        guard !snapshot.documents.isEmpty else { return }
+        
+        for document in snapshot.documents where document.documentID != currentUserId {
+            do {
+                try await document.reference.updateData([
+                    "fcmTokens": FieldValue.arrayRemove([token])
+                ])
+            } catch {
+                print("❌ Başka kullanıcıdan FCM token kaldırılamadı: \(error.localizedDescription)")
             }
         }
     }

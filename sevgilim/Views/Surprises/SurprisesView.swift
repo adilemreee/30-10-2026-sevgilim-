@@ -207,6 +207,9 @@ struct SurprisesView: View {
                     partnerName: partnerName,
                     onOpen: {
                         markSurpriseAsOpened(surprise)
+                    },
+                    onToggleManualHidden: { hidden in
+                        await toggleManualHidden(for: surprise, hidden: hidden)
                     }
                 )
                 .onTapGesture {
@@ -264,6 +267,15 @@ struct SurprisesView: View {
             } catch {
                 print("❌ Error marking surprise as opened: \(error.localizedDescription)")
             }
+        }
+    }
+    
+    private func toggleManualHidden(for surprise: Surprise, hidden: Bool) async {
+        guard surprise.createdBy == authService.currentUser?.id else { return }
+        do {
+            try await surpriseService.updateManualHiddenStatus(for: surprise, hidden: hidden)
+        } catch {
+            print("❌ Error updating surprise visibility: \(error.localizedDescription)")
         }
     }
     

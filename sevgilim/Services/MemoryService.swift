@@ -99,8 +99,26 @@ class MemoryService: ObservableObject {
         
         var updatedComments = memory.comments
         updatedComments.append(comment)
+        let commentsData = mapCommentsToData(updatedComments)
         
-        let commentsData = updatedComments.map { comment in
+        try await db.collection("memories").document(memoryId).updateData([
+            "comments": commentsData
+        ])
+    }
+    
+    func deleteComment(memory: Memory, comment: Comment) async throws {
+        guard let memoryId = memory.id else { return }
+        
+        let updatedComments = memory.comments.filter { $0.id != comment.id }
+        let commentsData = mapCommentsToData(updatedComments)
+        
+        try await db.collection("memories").document(memoryId).updateData([
+            "comments": commentsData
+        ])
+    }
+    
+    private func mapCommentsToData(_ comments: [Comment]) -> [[String: Any]] {
+        let commentsData = comments.map { comment in
             [
                 "id": comment.id,
                 "userId": comment.userId,
@@ -110,9 +128,7 @@ class MemoryService: ObservableObject {
             ] as [String: Any]
         }
         
-        try await db.collection("memories").document(memoryId).updateData([
-            "comments": commentsData
-        ])
+        return commentsData
     }
     
     func deleteMemory(_ memory: Memory) async throws {
