@@ -78,6 +78,44 @@ class MemoryService: ObservableObject {
         try await db.collection("memories").addDocument(data: data)
     }
     
+    func updateMemory(_ memory: Memory,
+                      title: String,
+                      content: String,
+                      date: Date,
+                      photoURL: String?,
+                      removePhoto: Bool,
+                      location: String?,
+                      tags: [String]?) async throws {
+        guard let memoryId = memory.id else { return }
+        
+        var data: [String: Any] = [
+            "title": title,
+            "content": content,
+            "date": Timestamp(date: date)
+        ]
+        
+        let trimmedLocation = location?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmedLocation.isEmpty {
+            data["location"] = FieldValue.delete()
+        } else {
+            data["location"] = trimmedLocation
+        }
+        
+        if let tags = tags, !tags.isEmpty {
+            data["tags"] = tags
+        } else {
+            data["tags"] = FieldValue.delete()
+        }
+        
+        if let photoURL = photoURL {
+            data["photoURL"] = photoURL
+        } else if removePhoto {
+            data["photoURL"] = FieldValue.delete()
+        }
+        
+        try await db.collection("memories").document(memoryId).updateData(data)
+    }
+    
     func toggleLike(memory: Memory, userId: String) async throws {
         guard let memoryId = memory.id else { return }
         
