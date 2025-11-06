@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import UIKit
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseMessaging
@@ -48,6 +49,9 @@ final class PushNotificationManager {
             }
 
             self.cachedToken = token
+#if DEBUG
+            print("📲 FCM token updated: \(token)")
+#endif
 
             if !self.notificationsEnabled {
                 return
@@ -144,10 +148,15 @@ final class PushNotificationManager {
     func setNotificationsEnabled(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: notificationsEnabledKey)
         
-        queue.async {
-            if enabled {
+        if enabled {
+            DispatchQueue.main.async {
+                UIApplication.shared.registerForRemoteNotifications()
+            }
+            queue.async {
                 self.refreshIfNeeded()
-            } else {
+            }
+        } else {
+            queue.async {
                 self.unregisterCurrentToken()
             }
         }
