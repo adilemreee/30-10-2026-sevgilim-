@@ -503,6 +503,7 @@ struct ChatView: View {
         }
         
         messageText = ""
+        HapticManager.shared.lightImpact()
         
         Task {
             do {

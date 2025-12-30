@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import WidgetKit
 
 struct HomeView: View {
     // MARK: - Environment Objects
@@ -262,11 +263,31 @@ struct HomeView: View {
             }
             .task {
                 viewModel.startListeners()
+                
+                // Sync data to widget on initial load
+                syncWidgetData()
+            }
+            .onChange(of: viewModel.relationship?.startDate) { _, _ in
+                // Sync widget when relationship data changes
+                syncWidgetData()
             }
         }
     }
     
     // MARK: - Private Methods
+    
+    /// Sync relationship data to widget
+    private func syncWidgetData() {
+        if let relationship = viewModel.relationship {
+            SharedDataManager.shared.saveRelationshipData(
+                user1Name: relationship.user1Name,
+                user2Name: relationship.user2Name,
+                startDate: relationship.startDate
+            )
+            WidgetCenter.shared.reloadAllTimelines()
+            print("✅ Widget data synced: \(relationship.user1Name) & \(relationship.user2Name)")
+        }
+    }
     
     /// Navigate to a destination with delay (for menu dismissal animation)
     private func navigateWithDelay(to binding: Binding<Bool>) {

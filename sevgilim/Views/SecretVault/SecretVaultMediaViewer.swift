@@ -6,6 +6,7 @@
 import SwiftUI
 import AVKit
 import UIKit
+import AVFoundation
 
 struct SecretVaultMediaViewer: View {
     @Binding var items: [SecretVaultItem]
@@ -649,6 +650,10 @@ private struct SecretVaultVideoViewerContent: View {
         
         Task {
             do {
+                // Ses ayarlarını yapılandır
+                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+                try AVAudioSession.sharedInstance().setActive(true)
+                
                 // Video'yu cache'le ve local URL al
                 let localURL = try await VideoCacheService.shared.cachedURL(for: item.downloadURL)
                 

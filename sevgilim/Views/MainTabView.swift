@@ -158,6 +158,7 @@ struct PillTabBar: View {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                         selectedTab = index
                     }
+                    HapticManager.shared.selection()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: tabs[index].icon)
@@ -210,6 +211,7 @@ struct PillTabBar: View {
                         )
                 }
         }
+        .contentShape(Capsule())
         .padding(.horizontal, 20)
         .padding(.bottom, 8)
     }
