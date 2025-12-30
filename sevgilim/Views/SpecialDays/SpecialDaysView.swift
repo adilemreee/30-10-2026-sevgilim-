@@ -179,7 +179,7 @@ struct SpecialDaysView: View {
                                 .shadow(color: themeManager.currentTheme.primaryColor.opacity(0.3), radius: 10, x: 0, y: 5)
                         }
                         .padding(.trailing, 20)
-                        .padding(.bottom, 20)
+                        .padding(.bottom, 80)
                     }
                 }
             }

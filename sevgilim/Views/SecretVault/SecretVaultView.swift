@@ -303,7 +303,7 @@ struct SecretVaultContentView: View {
                         .shadow(color: themeManager.currentTheme.primaryColor.opacity(0.28), radius: 12, x: 0, y: 6)
                 }
                 .padding(.trailing, 22)
-                .padding(.bottom, 24)
+                .padding(.bottom, 80)
             }
         }
     }

@@ -14,6 +14,7 @@ struct ChatView: View {
     @EnvironmentObject var relationshipService: RelationshipService
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var messageService: MessageService
+    @EnvironmentObject var navigationRouter: AppNavigationRouter
     
     @State private var messageText = ""
     @State private var selectedImage: PhotosPickerItem?
@@ -78,8 +79,18 @@ struct ChatView: View {
         mainContent
             .navigationTitle("💬 Sohbet")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear(perform: setupView)
-            .onDisappear(perform: cleanupView)
+            .onAppear {
+                withAnimation(.spring(response: 0.15, dampingFraction: 0.9)) {
+                    navigationRouter.hideTabBar = true
+                }
+                setupView()
+            }
+            .onDisappear {
+                withAnimation(.spring(response: 0.15, dampingFraction: 0.9)) {
+                    navigationRouter.hideTabBar = false
+                }
+                cleanupView()
+            }
             .onChange(of: authService.currentUser?.id) { _ in
                 hasStartedListeners = false
                 setupView()

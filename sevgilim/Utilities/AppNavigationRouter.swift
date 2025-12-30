@@ -24,6 +24,9 @@ final class AppNavigationRouter: ObservableObject {
     @Published private(set) var secretVaultTrigger: Int = 0
     @Published private(set) var memoriesTrigger: Int = 0
     
+    /// Tab bar visibility control
+    @Published var hideTabBar: Bool = false
+    
     /// Requests navigation to the chat screen.
     func openChat() {
         DispatchQueue.main.async {

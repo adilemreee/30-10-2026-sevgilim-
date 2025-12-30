@@ -27,148 +27,190 @@ struct MainTabView: View {
     @State private var selectedTab = 0
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            HomeView(
-                viewModel: HomeViewModel(
-                    authService: authService,
-                    relationshipService: relationshipService,
-                    memoryService: memoryService,
-                    photoService: photoService,
-                    noteService: noteService,
-                    planService: planService,
-                    surpriseService: surpriseService,
-                    specialDayService: specialDayService,
-                    messageService: messageService,
-                    moodService: moodService
-                )
-            )
-                .tag(0)
-                .tabItem {
-                    Image(systemName: selectedTab == 0 ? "house.fill" : "house")
-                    Text("Anasayfa")
+        ZStack(alignment: .bottom) {
+            // Content with bottom padding for tab bar
+            Group {
+                switch selectedTab {
+                case 0:
+                    HomeView(
+                        viewModel: HomeViewModel(
+                            authService: authService,
+                            relationshipService: relationshipService,
+                            memoryService: memoryService,
+                            photoService: photoService,
+                            noteService: noteService,
+                            planService: planService,
+                            surpriseService: surpriseService,
+                            specialDayService: specialDayService,
+                            messageService: messageService,
+                            moodService: moodService
+                        )
+                    )
+                case 1:
+                    MemoriesView()
+                case 2:
+                    PhotosView()
+                case 3:
+                    NotesView()
+                case 4:
+                    ProfileView()
+                default:
+                    EmptyView()
                 }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .bottom) {
+                // Tab bar için boşluk - sadece tab bar görünürken
+                Color.clear.frame(height: navigationRouter.hideTabBar ? 0 : 70)
+                    .animation(.spring(response: 0.15, dampingFraction: 0.9), value: navigationRouter.hideTabBar)
+            }
             
-            MemoriesView()
-                .tag(1)
-                .tabItem {
-                    Image(systemName: selectedTab == 1 ? "heart.text.square.fill" : "heart.text.square")
-                    Text("Anılar")
+            // Floating Pill Tab Bar
+            VStack(spacing: 0) {
+                Spacer()
+                if !navigationRouter.hideTabBar {
+                    PillTabBar(
+                        selectedTab: $selectedTab,
+                        theme: themeManager.currentTheme
+                    )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .move(edge: .bottom).combined(with: .opacity)
+                    ))
                 }
-            
-            PhotosView()
-                .tag(2)
-                .tabItem {
-                    Image(systemName: selectedTab == 2 ? "photo.fill" : "photo")
-                    Text("Fotoğraflar")
-                }
-            
-            NotesView()
-                .tag(3)
-                .tabItem {
-                    Image(systemName: selectedTab == 3 ? "note.text" : "note.text")
-                    Text("Notlar")
-                }
-            
-            ProfileView()
-                .tag(4)
-                .tabItem {
-                    Image(systemName: selectedTab == 4 ? "person.fill" : "person")
-                    Text("Profil")
-                }
+            }
+            .animation(.spring(response: 0.15, dampingFraction: 0.9), value: navigationRouter.hideTabBar)
         }
-        .accentColor(themeManager.currentTheme.primaryColor)
+        .ignoresSafeArea(.keyboard)
         .onAppear {
-            // Tüm servislerin listener'larını başlat
-            if let currentUser = authService.currentUser,
-               let userId = currentUser.id,
-               let relationshipId = currentUser.relationshipId {
+            startServices()
+            handleNavigationTriggers()
+        }
+        .onChange(of: navigationRouter.chatTrigger) { _, _ in selectedTab = 0 }
+        .onChange(of: navigationRouter.surprisesTrigger) { _, _ in selectedTab = 0 }
+        .onChange(of: navigationRouter.specialDaysTrigger) { _, _ in selectedTab = 0 }
+        .onChange(of: navigationRouter.moviesTrigger) { _, _ in selectedTab = 0 }
+        .onChange(of: navigationRouter.plansTrigger) { _, _ in selectedTab = 0 }
+        .onChange(of: navigationRouter.songsTrigger) { _, _ in selectedTab = 0 }
+        .onChange(of: navigationRouter.placesTrigger) { _, _ in selectedTab = 0 }
+        .onChange(of: navigationRouter.secretVaultTrigger) { _, _ in selectedTab = 0 }
+        .onChange(of: navigationRouter.photosTrigger) { _, _ in selectedTab = 2 }
+        .onChange(of: navigationRouter.notesTrigger) { _, _ in selectedTab = 3 }
+        .onChange(of: navigationRouter.memoriesTrigger) { _, _ in selectedTab = 1 }
+    }
+    
+    private func startServices() {
+        guard let currentUser = authService.currentUser,
+              let userId = currentUser.id,
+              let relationshipId = currentUser.relationshipId else { return }
+        
+        surpriseService.listenToSurprises(relationshipId: relationshipId, userId: userId)
+        memoryService.listenToMemories(relationshipId: relationshipId)
+        photoService.listenToPhotos(relationshipId: relationshipId)
+        noteService.listenToNotes(relationshipId: relationshipId)
+        planService.listenToPlans(relationshipId: relationshipId)
+        movieService.listenToMovies(relationshipId: relationshipId)
+        placeService.listenToPlaces(relationshipId: relationshipId)
+        songService.listenToSongs(relationshipId: relationshipId)
+        storyService.listenToStories(relationshipId: relationshipId, currentUserId: userId)
+        secretVaultService.listenToVault(relationshipId: relationshipId)
+        
+        print("🎬 Tüm servisler başlatıldı")
+    }
+    
+    private func handleNavigationTriggers() {
+        if navigationRouter.chatTrigger > 0 { selectedTab = 0 }
+        if navigationRouter.surprisesTrigger > 0 { selectedTab = 0 }
+        if navigationRouter.specialDaysTrigger > 0 { selectedTab = 0 }
+        if navigationRouter.moviesTrigger > 0 { selectedTab = 0 }
+        if navigationRouter.plansTrigger > 0 { selectedTab = 0 }
+        if navigationRouter.songsTrigger > 0 { selectedTab = 0 }
+        if navigationRouter.placesTrigger > 0 { selectedTab = 0 }
+        if navigationRouter.secretVaultTrigger > 0 { selectedTab = 0 }
+        if navigationRouter.photosTrigger > 0 { selectedTab = 2 }
+        if navigationRouter.notesTrigger > 0 { selectedTab = 3 }
+        if navigationRouter.memoriesTrigger > 0 { selectedTab = 1 }
+    }
+}
+
+// MARK: - Pill Tab Bar Component
+struct PillTabBar: View {
+    @Binding var selectedTab: Int
+    let theme: AppTheme
+    @Namespace private var pillAnimation
+    
+    private var tabs: [(icon: String, label: String)] {
+        [
+            ("house.fill", "Ana"),
+            ("heart.fill", "Anılar"),
+            ("photo.fill", "Foto"),
+            ("note.text", "Notlar"),
+            ("person.fill", "Profil")
+        ]
+    }
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<tabs.count, id: \.self) { index in
+                let isSelected = selectedTab == index
                 
-                // Sürpriz servisini başlat
-                surpriseService.listenToSurprises(relationshipId: relationshipId, userId: userId)
-                
-                // Diğer servisleri de başlat
-                memoryService.listenToMemories(relationshipId: relationshipId)
-                photoService.listenToPhotos(relationshipId: relationshipId)
-                noteService.listenToNotes(relationshipId: relationshipId)
-                planService.listenToPlans(relationshipId: relationshipId)
-                movieService.listenToMovies(relationshipId: relationshipId)
-                placeService.listenToPlaces(relationshipId: relationshipId)
-                songService.listenToSongs(relationshipId: relationshipId)
-                storyService.listenToStories(relationshipId: relationshipId, currentUserId: userId)
-                secretVaultService.listenToVault(relationshipId: relationshipId)
-                // messageService.listenToMessages() kaldırıldı - ChatView açıldığında başlayacak
-                
-                print("🎬 Tüm servisler başlatıldı - Story listener aktif")
-            }
-            
-            if navigationRouter.chatTrigger > 0 {
-                selectedTab = 0
-            }
-            
-            if navigationRouter.surprisesTrigger > 0 {
-                selectedTab = 0
-            }
-            
-            if navigationRouter.specialDaysTrigger > 0 {
-                selectedTab = 0
-            }
-            if navigationRouter.moviesTrigger > 0 {
-                selectedTab = 0
-            }
-            if navigationRouter.plansTrigger > 0 {
-                selectedTab = 0
-            }
-            if navigationRouter.songsTrigger > 0 {
-                selectedTab = 0
-            }
-            if navigationRouter.placesTrigger > 0 {
-                selectedTab = 0
-            }
-            if navigationRouter.secretVaultTrigger > 0 {
-                selectedTab = 0
-            }
-            if navigationRouter.photosTrigger > 0 {
-                selectedTab = 2
-            }
-            if navigationRouter.notesTrigger > 0 {
-                selectedTab = 3
-            }
-            if navigationRouter.memoriesTrigger > 0 {
-                selectedTab = 1
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                        selectedTab = index
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: tabs[index].icon)
+                            .font(.system(size: 16, weight: .semibold))
+                        
+                        if isSelected {
+                            Text(tabs[index].label)
+                                .font(.system(size: 13, weight: .semibold))
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .foregroundStyle(isSelected ? .white : .primary.opacity(0.6))
+                    .padding(.horizontal, isSelected ? 16 : 14)
+                    .padding(.vertical, 12)
+                    .background {
+                        if isSelected {
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            theme.primaryColor,
+                                            theme.secondaryColor
+                                        ],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .matchedGeometryEffect(id: "pill", in: pillAnimation)
+                                .shadow(color: theme.primaryColor.opacity(0.4), radius: 8, x: 0, y: 4)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
             }
         }
-        .onChange(of: navigationRouter.chatTrigger) { _ in
-            selectedTab = 0
+        .padding(8)
+        .background {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.12), radius: 16, x: 0, y: 8)
+                .overlay {
+                    Capsule()
+                        .stroke(
+                            LinearGradient(
+                                colors: [.white.opacity(0.4), .white.opacity(0.1)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 0.5
+                        )
+                }
         }
-        .onChange(of: navigationRouter.surprisesTrigger) { _ in
-            selectedTab = 0
-        }
-        .onChange(of: navigationRouter.specialDaysTrigger) { _ in
-            selectedTab = 0
-        }
-        .onChange(of: navigationRouter.moviesTrigger) { _ in
-            selectedTab = 0
-        }
-        .onChange(of: navigationRouter.plansTrigger) { _ in
-            selectedTab = 0
-        }
-        .onChange(of: navigationRouter.songsTrigger) { _ in
-            selectedTab = 0
-        }
-        .onChange(of: navigationRouter.placesTrigger) { _ in
-            selectedTab = 0
-        }
-        .onChange(of: navigationRouter.secretVaultTrigger) { _ in
-            selectedTab = 0
-        }
-        .onChange(of: navigationRouter.photosTrigger) { _ in
-            selectedTab = 2
-        }
-        .onChange(of: navigationRouter.notesTrigger) { _ in
-            selectedTab = 3
-        }
-        .onChange(of: navigationRouter.memoriesTrigger) { _ in
-            selectedTab = 1
-        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
     }
 }
