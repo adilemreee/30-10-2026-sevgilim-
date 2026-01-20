@@ -21,6 +21,10 @@ class MemoryService: ObservableObject {
         isLoading = true
         
         // Optimized query: limit results for faster loading
+        guard listener == nil else { return }
+        
+        isLoading = true
+        
         listener = db.collection("memories")
             .whereField("relationshipId", isEqualTo: relationshipId)
             .order(by: "date", descending: true)

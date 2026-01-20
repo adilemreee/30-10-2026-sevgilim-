@@ -132,12 +132,7 @@ struct NotesView: View {
         }
         .onAppear {
             print("📝 NotesView appeared")
-            if let relationshipId = authService.currentUser?.relationshipId {
-                print("📝 Starting notes listener for relationship: \(relationshipId)")
-                noteService.listenToNotes(relationshipId: relationshipId)
-            } else {
-                print("❌ No relationship ID found")
-            }
+            // Listener is handled by MainTabView
         }
         .onDisappear {
             print("📝 NotesView disappeared - keeping listener active")

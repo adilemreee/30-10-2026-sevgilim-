@@ -20,6 +20,10 @@ class NoteService: ObservableObject {
         isLoading = true
         
         // Optimized query with limit for better performance
+        guard listener == nil else { return }
+        
+        isLoading = true
+        
         listener = db.collection("notes")
             .whereField("relationshipId", isEqualTo: relationshipId)
             .order(by: "updatedAt", descending: true)

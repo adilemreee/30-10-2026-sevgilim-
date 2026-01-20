@@ -227,9 +227,7 @@ struct PhotosView: View {
             }
         }
         .onAppear {
-            if let relationshipId = authService.currentUser?.relationshipId {
-                photoService.listenToPhotos(relationshipId: relationshipId)
-            }
+            // Listener is handled by MainTabView
         }
     }
 }

@@ -162,9 +162,7 @@ struct MemoriesView: View {
             MemoryDetailView(memory: memory)
         }
         .onAppear {
-            if let relationshipId = authService.currentUser?.relationshipId {
-                memoryService.listenToMemories(relationshipId: relationshipId)
-            }
+            // Listener is handled by MainTabView
         }
     }
 }
