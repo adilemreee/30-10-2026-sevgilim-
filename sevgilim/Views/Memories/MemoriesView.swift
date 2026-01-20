@@ -357,6 +357,7 @@ struct MemoryDetailView: View {
     @EnvironmentObject var memoryService: MemoryService
     @EnvironmentObject var authService: AuthenticationService
     @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var relationshipService: RelationshipService
     
     @State private var showingDeleteAlert = false
     @State private var showingEditMemory = false
@@ -368,6 +369,7 @@ struct MemoryDetailView: View {
     @State private var photoViewerIndex = 0
     @State private var commentToDelete: Comment?
     @State private var isDeletingComment = false
+    @State private var partnerUser: User?
     @StateObject private var singlePhotoService = PhotoService()
     
     // Get current memory from service for live updates
@@ -438,6 +440,7 @@ struct MemoryDetailView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             Image(systemName: "calendar")
+                                .font(.subheadline)
                                 .foregroundColor(.secondary)
                             Text(currentMemory.date, formatter: DateFormatter.displayFormat)
                                 .font(.subheadline)
@@ -510,78 +513,47 @@ struct MemoryDetailView: View {
                         VStack(alignment: .leading, spacing: 15) {
                             Text("Yorumlar")
                                 .font(.headline)
+                                .padding(.horizontal, 4)
                             
                             if let commentError {
                                 Text(commentError)
                                     .font(.caption)
                                     .foregroundColor(.red)
+                                    .padding(.horizontal, 4)
                             }
                             
-                            if currentMemory.comments.isEmpty {
-                                Text("Henüz yorum yok")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                                    .padding()
-                            } else {
-                                ForEach(currentMemory.comments) { comment in
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HStack(spacing: 8) {
-                                            Text(comment.userName)
-                                                .font(.caption.bold())
-                                                .foregroundColor(themeManager.currentTheme.primaryColor)
-                                            Text(comment.createdAt.timeAgo())
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                            Spacer()
-                                            if canDeleteComment(comment) {
-                                                Button {
-                                                    commentToDelete = comment
-                                                } label: {
-                                                    Image(systemName: "trash")
-                                                        .font(.caption)
-                                                        .foregroundColor(.red.opacity(0.8))
-                                                }
-                                                .buttonStyle(.plain)
-                                                .disabled(isDeletingComment)
-                                            }
-                                        }
-                                        Text(comment.text)
-                                            .font(.caption)
-                                            .foregroundColor(.primary)
+                            VStack(spacing: 12) {
+                                if currentMemory.comments.isEmpty {
+                                    Text("Henüz yorum yok")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                        .padding(.vertical, 20)
+                                } else {
+                                    ForEach(currentMemory.comments) { comment in
+                                        let isCurrentUser = comment.userId == authService.currentUser?.id
+                                        ModernCommentRow(
+                                            comment: comment,
+                                            isCurrentUser: isCurrentUser,
+                                            profileImageURL: isCurrentUser ? 
+                                                authService.currentUser?.profileImageURL : 
+                                                partnerUser?.profileImageURL,
+                                            onDelete: { commentToDelete = comment },
+                                            canDelete: canDeleteComment(comment)
+                                        )
+                                        .transition(.scale.combined(with: .opacity))
                                     }
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(themeManager.currentTheme.primaryColor.opacity(0.08))
-                                    )
                                 }
                             }
+                            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: currentMemory.comments.count)
                             
                             // Add Comment
-                            HStack(spacing: 12) {
-                                TextField("Yorum ekle...", text: $commentText, axis: .vertical)
-                                    .lineLimit(1...4)
-                                    .textFieldStyle(.roundedBorder)
-                                    .submitLabel(.send)
-                                    .disabled(isDeletingComment)
-                                    .onSubmit(addComment)
-                                
-                                Button(action: addComment) {
-                                    if isSubmittingComment {
-                                        ProgressView()
-                                            .progressViewStyle(.circular)
-                                    } else {
-                                        Image(systemName: "paperplane.fill")
-                                            .font(.title3)
-                                            .foregroundStyle(themeManager.currentTheme.primaryColor)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(isSubmittingComment || trimmedCommentText().isEmpty || isDeletingComment)
-                            }
-                            .padding(.top, 4)
+                            ModernCommentInput(
+                                text: $commentText,
+                                isSubmitting: $isSubmittingComment,
+                                onSubmit: addComment
+                            )
+                            .padding(.top, 8)
                         }
                     }
                 }
@@ -618,6 +590,22 @@ struct MemoryDetailView: View {
         .onDisappear {
             singlePhotoService.photos = []
         }
+        .task {
+            // Fetch partner profile on load if not already loaded
+            if partnerUser == nil, 
+               let currentUserId = authService.currentUser?.id,
+               let relationship = relationshipService.currentRelationship {
+                let partnerId = relationship.user1Id == currentUserId ? relationship.user2Id : relationship.user1Id
+                if !partnerId.isEmpty {
+                    do {
+                        partnerUser = try await authService.getUserProfile(userId: partnerId)
+                    } catch {
+                        print("Failed to fetch partner profile: \(error)")
+                    }
+                }
+            }
+        }
+        // ... (Keep confirmation dialog and full screen cover)
         .confirmationDialog(
             "Yorumu Sil",
             isPresented: Binding(

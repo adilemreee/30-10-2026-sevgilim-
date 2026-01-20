@@ -163,6 +163,23 @@ class AuthenticationService: ObservableObject {
         fetchUserData(userId: userId)
     }
     
+    func getUserProfile(userId: String) async throws -> User {
+        let snapshot = try await db.collection("users").document(userId).getDocument()
+        guard let data = snapshot.data() else {
+            throw NSError(domain: "AuthenticationService", code: 404, userInfo: [NSLocalizedDescriptionKey: "User not found"])
+        }
+        
+        return User(
+            id: userId,
+            email: data["email"] as? String ?? "",
+            name: data["name"] as? String ?? "",
+            profileImageURL: data["profileImageURL"] as? String,
+            relationshipId: data["relationshipId"] as? String,
+            createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date(),
+            fcmTokens: data["fcmTokens"] as? [String]
+        )
+    }
+    
     func updateRelationshipId(_ relationshipId: String) async throws {
         guard let userId = currentUser?.id else { return }
         

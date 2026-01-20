@@ -167,10 +167,12 @@ struct PillTabBar: View {
                 let isSelected = selectedTab == index
                 
                 Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                        selectedTab = index
-                    }
+                    // Trigger haptic instantly
                     HapticManager.shared.selection()
+                    
+                    // Update state without global animation to prevent heavy view transition lag
+                    // The .animation modifier below will handle the smooth pill movement
+                    selectedTab = index
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: tabs[index].icon)
@@ -179,7 +181,7 @@ struct PillTabBar: View {
                         if isSelected {
                             Text(tabs[index].label)
                                 .font(.system(size: 13, weight: .semibold))
-                                .transition(.scale.combined(with: .opacity))
+                                .fixedSize() // Prevents layout jumping
                         }
                     }
                     .foregroundStyle(isSelected ? .white : .primary.opacity(0.6))
@@ -223,8 +225,11 @@ struct PillTabBar: View {
                         )
                 }
         }
+        .compositingGroup() // GPU acceleration: flattens the view before applying effects
         .contentShape(Capsule())
         .padding(.horizontal, 20)
         .padding(.bottom, 8)
+        // Enable smooth animation for layout changes (pill movement) inside this view
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: selectedTab)
     }
 }
