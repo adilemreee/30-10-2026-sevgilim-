@@ -115,8 +115,9 @@ struct MemoriesView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 16) {
-                            ForEach(sortedMemories) { memory in
+                            ForEach(sortedMemories, id: \.id) { memory in
                                 MemoryCardModern(memory: memory)
+                                    .contentShape(Rectangle())
                                     .onTapGesture {
                                         selectedMemory = memory
                                     }
@@ -303,7 +304,7 @@ struct MemoryCardModern: View {
                             .foregroundStyle(isLiked ? themeManager.currentTheme.primaryColor : .secondary)
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(BorderlessButtonStyle())
                 .disabled(isProcessingLike)
                 
                 HStack(spacing: 6) {
