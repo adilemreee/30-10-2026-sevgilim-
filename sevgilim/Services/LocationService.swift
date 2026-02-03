@@ -100,6 +100,11 @@ class LocationService: NSObject, ObservableObject {
             completion(placeName, address.isEmpty ? nil : address)
         }
     }
+    
+    deinit {
+        locationManager.stopUpdatingLocation()
+        locationManager.delegate = nil
+    }
 }
 
 // MARK: - CLLocationManagerDelegate

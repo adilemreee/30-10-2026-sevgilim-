@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import CoreLocation
 
 struct PartnerLocationCard: View {
     @ObservedObject var proximityService: ProximityService
@@ -20,7 +19,7 @@ struct PartnerLocationCard: View {
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.8))
                 
-                Text("Aşkınızzzınn Konumu")
+                Text("Aşkımınn Konumu")
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.8))
             }
@@ -38,7 +37,7 @@ struct PartnerLocationCard: View {
                             Image(systemName: "heart.fill")
                                 .foregroundColor(.red)
                                 .font(.caption)
-                            Text("Çok Yakınınızda!")
+                            Text("Aşkının Kollarının Arasındasınnn🧡")
                                 .font(.callout.bold())
                                 .foregroundColor(.white)
                         }
@@ -46,6 +45,15 @@ struct PartnerLocationCard: View {
                         Text("Uzaklık")
                             .font(.callout.bold())
                             .foregroundColor(.white.opacity(0.8))
+                    }
+                    
+                    // Last update time
+                    if let lastUpdate = proximityService.lastPartnerUpdateTime {
+                        Text("Son güncelleme: \(lastUpdate, style: .relative) önce")
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.5))
+                            .padding(.top, 4)
+                            .environment(\.locale, Locale(identifier: "tr_TR"))
                     }
                 } else {
                     // Calculating or No Data
@@ -81,17 +89,6 @@ struct PartnerLocationCard: View {
         .padding(.vertical, 20)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
         .shadow(color: .black.opacity(0.1), radius: 15, x: 0, y: 5)
-        .overlay(alignment: .bottom) {
-            if proximityService.permissionStatus == .authorizedWhenInUse {
-                Text("⚠️ Arka plan için 'Her Zaman' izni gerekli")
-                    .font(.caption2.bold())
-                    .foregroundColor(.white)
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 8)
-                    .background(.red.opacity(0.8), in: Capsule())
-                    .offset(y: 12)
-            }
-        }
         .onAppear {
             // Uygulama açıldığında veya view göründüğünde hesaplamayı tetikle
             if proximityService.proximityNotificationsEnabled {

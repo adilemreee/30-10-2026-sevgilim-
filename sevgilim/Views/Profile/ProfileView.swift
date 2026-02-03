@@ -223,7 +223,7 @@ struct RelationshipInfoCard: View {
                 InfoRow(
                     icon: "calendar",
                     title: "Başlangıç",
-                    value: relationship.startDate.formatted(date: .long, time: .omitted)
+                    value: DateFormatter.displayFormat.string(from: relationship.startDate)
                 )
                 
                 InfoRow(

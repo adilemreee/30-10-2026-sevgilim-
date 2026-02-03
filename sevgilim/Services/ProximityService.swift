@@ -21,13 +21,13 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var isNearby: Bool = false
     @Published var isTrackingEnabled: Bool = false
     @Published var lastNotificationTime: Date?
+    @Published var lastPartnerUpdateTime: Date?
     
     // MARK: - Settings (UserDefaults backed)
     @Published var proximityThreshold: Double {
         didSet {
             UserDefaults.standard.set(proximityThreshold, forKey: "proximityThreshold")
             checkProximity() // Threshold değişince yeniden hesapla
-            updateGeofenceRegion() // Threshold değişince çitin boyutunu güncelle
         }
     }
     
@@ -92,12 +92,11 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("❌ Location manager error: \(error.localizedDescription)")
+        debugLog("❌ Location manager error: \(error.localizedDescription)")
     }
     
     nonisolated func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         Task { @MainActor in
-            self.permissionStatus = status
             if status == .authorizedAlways || status == .authorizedWhenInUse {
                 self.locationManager?.startUpdatingLocation()
             }
@@ -109,10 +108,16 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         // User ID'yi güncelle
         self.currentUserId = userId
         
+        // Safety check: Don't start if disabled
+        guard proximityNotificationsEnabled else {
+            debugLog("🚫 Proximity tracking attempted but passed guard: Disabled by user")
+            return
+        }
+        
         if isTrackingEnabled {
             // Zaten tracking açıksa, sadece konumları yeniden al ve hesapla
             forceRefresh()
-            print("🔄 Proximity tracking refreshed")
+            debugLog("🔄 Proximity tracking refreshed")
             return
         }
         
@@ -124,7 +129,7 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         // Konum güncellemelerini başlat
         startLocationUpdates()
         
-        print("✅ Proximity tracking started for user: \(userId), partner: \(partnerId)")
+        debugLog("✅ Proximity tracking started for user: \(userId), partner: \(partnerId)")
     }
     
     func stopTracking() {
@@ -137,7 +142,7 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         partnerLocation = nil
         userLocation = nil
         
-        print("🔴 Proximity tracking stopped")
+        debugLog("🔴 Proximity tracking stopped")
     }
     
     // MARK: - Start Location Updates
@@ -179,7 +184,7 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
                 guard let self = self else { return }
                 
                 if let error = error {
-                    print("❌ Partner location error: \(error.localizedDescription)")
+                    debugLog("❌ Partner location error: \(error.localizedDescription)")
                     return
                 }
                 
@@ -189,10 +194,18 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
                     return
                 }
                 
+                // Extract timestamp from Firebase
+                let timestamp: Date?
+                if let ts = data["timestamp"] as? Timestamp {
+                    timestamp = ts.dateValue()
+                } else {
+                    timestamp = nil
+                }
+                
                 Task { @MainActor in
                     self.partnerLocation = CLLocation(latitude: latitude, longitude: longitude)
+                    self.lastPartnerUpdateTime = timestamp
                     self.checkProximity()
-                    self.updateGeofenceRegion() // Partner konumu değişince çiti güncelle
                 }
             }
     }
@@ -210,9 +223,9 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
             .document(userId)
             .setData(locationData, merge: true) { error in
                 if let error = error {
-                    print("❌ Location update error: \(error.localizedDescription)")
+                    debugLog("❌ Location update error: \(error.localizedDescription)")
                 } else {
-                    print("📍 Location updated")
+                    debugLog("📍 Location updated")
                 }
             }
     }
@@ -249,44 +262,11 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         let wasNearby = isNearby
         isNearby = distance <= proximityThreshold
         
-        print("📍 Distance calculated: \(Int(distance))m (threshold: \(Int(proximityThreshold))m)")
+        debugLog("📍 Distance calculated: \(Int(distance))m (threshold: \(Int(proximityThreshold))m)")
         
         // Yeni yakınlaşma olduysa bildirim gönder
         if isNearby && !wasNearby && proximityNotificationsEnabled {
             sendProximityNotification(distance: distance)
-        }
-        
-        // Hibrit Pil Modu Yönetimi
-        checkDistanceAndToggleMode(distance: distance)
-    }
-    
-    // MARK: - Hybrid Battery Mode
-    private func checkDistanceAndToggleMode(distance: Double) {
-        guard let locationManager = locationManager else { return }
-        
-        // Eğer mesafe > 2km ise GPS'i kapat, sadece Geofence dinle
-        if distance > 2000 {
-            if isTrackingEnabled && locationManager.desiredAccuracy != kCLLocationAccuracyThreeKilometers {
-                locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
-                locationManager.distanceFilter = 500 // 500m
-                print("🔋 Hybrid Mode: Switching to Low Power (Far away)")
-            }
-        } else {
-            // Yakındaysa yüksek hassasiyet
-            if isTrackingEnabled && locationManager.desiredAccuracy != kCLLocationAccuracyHundredMeters {
-                locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-                locationManager.distanceFilter = 50 // 50m
-                print("⚡️ Hybrid Mode: Switching to High Accuracy (Nearby)")
-            }
-        }
-    }
-    
-    // MARK: - Permission Status
-    @Published var permissionStatus: CLAuthorizationStatus = .notDetermined
-    
-    private func updatePermissionStatus(_ status: CLAuthorizationStatus) {
-        Task { @MainActor in
-            self.permissionStatus = status
         }
     }
     
@@ -295,7 +275,7 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         // Cooldown kontrolü
         if let lastTime = lastNotificationTime,
            Date().timeIntervalSince(lastTime) < notificationCooldown {
-            print("⏳ Notification cooldown active")
+            debugLog("⏳ Notification cooldown active")
             return
         }
         
@@ -315,21 +295,21 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("❌ Notification error: \(error.localizedDescription)")
+                debugLog("❌ Notification error: \(error.localizedDescription)")
             } else {
-                print("💕 Proximity notification sent!")
+                debugLog("💕 Proximity notification sent!")
             }
         }
     }
     
     private func formatDistanceMessage(_ distance: Double) -> String {
         if distance < 100 {
-            return "Aşkınızzz çok yakınında! 💑"
+            return "Aşkının kollarındasın... 💑"
         } else if distance < 500 {
-            return "Aşkınızzz yaklaşık \(Int(distance)) metre uzaklıkta"
+            return "Aşkın yaklaşık \(Int(distance)) metre uzaklıkta"
         } else {
             let km = distance / 1000
-            return String(format: "Aşkınızzz yaklaşık %.1f km uzaklıkta", km)
+            return String(format: "Aşkın yaklaşık %.1f km uzaklıkta", km)
         }
     }
     
@@ -343,61 +323,6 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
             let km = distance / 1000
             return String(format: "%.1f km", km)
         }
-    }
-    
-    // MARK: - Geofencing Logic
-    private func updateGeofenceRegion() {
-        guard let partnerLoc = partnerLocation else { return }
-        
-        // Önceki regionları temizle
-        stopMonitoringRegions()
-        
-        // Yeni region oluştur
-        let region = CLCircularRegion(
-            center: partnerLoc.coordinate,
-            radius: proximityThreshold,
-            identifier: "PartnerProximityRegion"
-        )
-        
-        region.notifyOnEntry = true
-        region.notifyOnExit = true
-        
-        locationManager?.startMonitoring(for: region)
-        print("🌐 Geofence updated: Center \(partnerLoc.coordinate), Radius: \(proximityThreshold)m")
-    }
-    
-    private func stopMonitoringRegions() {
-        guard let locationManager = locationManager else { return }
-        for region in locationManager.monitoredRegions {
-            locationManager.stopMonitoring(for: region)
-        }
-    }
-    
-    // MARK: - CLLocationManagerDelegate Region Methods
-    nonisolated func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
-        print("📍 Did enter region: \(region.identifier)")
-        
-        Task { @MainActor in
-            // Uygulama uyandı, hemen konum güncellemesi yap
-            self.forceRefresh()
-            
-            // Eğer bildirim gönderilmediyse tetikle
-            if let partnerLoc = self.partnerLocation,
-               let userLoc = self.userLocation {
-                let distance = userLoc.distance(from: partnerLoc)
-                if distance <= self.proximityThreshold {
-                    self.sendProximityNotification(distance: distance)
-                }
-            } else {
-                 // Konumlar o an hazır değilse bile generic bildirim gönder
-                 self.sendProximityNotification(distance: 0) // 0 implies unknown but close
-            }
-        }
-    }
-    
-    nonisolated func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
-        print("📍 Did exit region: \(region.identifier)")
-        // Çıkışta özel bir işlem gerekirse buraya eklenebilir
     }
     
     // MARK: - Cleanup

@@ -90,10 +90,12 @@ struct HomeView: View {
                             )
                             
                             // Partner Location
-                            PartnerLocationCard(
-                                proximityService: proximityService,
-                                theme: themeManager.currentTheme
-                            )
+                            if proximityService.proximityNotificationsEnabled {
+                                PartnerLocationCard(
+                                    proximityService: proximityService,
+                                    theme: themeManager.currentTheme
+                                )
+                            }
                             
                             MoodStatusWidget(
                                 theme: themeManager.currentTheme,
