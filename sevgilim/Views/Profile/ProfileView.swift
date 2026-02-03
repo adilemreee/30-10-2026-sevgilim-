@@ -359,6 +359,8 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var authService: AuthenticationService
     @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var proximityService: ProximityService
+    @EnvironmentObject var relationshipService: RelationshipService
     
     @State private var showingDeleteAccountAlert = false
     @State private var showingClearCacheAlert = false
@@ -443,6 +445,95 @@ struct SettingsView: View {
                                 .padding(16)
                                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                             }
+                            
+                            // Yakınlık Bildirimi Ayarları
+                            VStack(spacing: 0) {
+                                Toggle(isOn: $proximityService.proximityNotificationsEnabled) {
+                                    HStack(spacing: 15) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.pink.opacity(0.2))
+                                                .frame(width: 50, height: 50)
+                                            
+                                            Image(systemName: "location.fill")
+                                                .font(.title3)
+                                                .foregroundColor(.pink)
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Yakınlık Bildirimi")
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                                .foregroundColor(.primary)
+                                            
+                                            Text(proximityService.proximityNotificationsEnabled ? "Aktif" : "Kapalı")
+                                                .font(.caption)
+                                                .foregroundColor(proximityService.proximityNotificationsEnabled ? .green : .secondary)
+                                        }
+                                    }
+                                }
+                                .padding(16)
+                                .onChange(of: proximityService.proximityNotificationsEnabled) { _, isEnabled in
+                                    if isEnabled {
+                                        if let userId = authService.currentUser?.id,
+                                           let relationship = relationshipService.currentRelationship {
+                                            proximityService.startTracking(
+                                                userId: userId,
+                                                partnerId: relationship.partnerId(for: userId),
+                                                relationshipId: relationship.id ?? ""
+                                            )
+                                        }
+                                    } else {
+                                        proximityService.stopTracking()
+                                    }
+                                }
+                                
+                                if proximityService.proximityNotificationsEnabled {
+                                    Divider()
+                                        .padding(.leading, 80)
+                                    
+                                    HStack {
+                                        Text("Bildirim Mesafesi")
+                                            .font(.subheadline)
+                                            .foregroundColor(.primary)
+                                        
+                                        Spacer()
+                                        
+                                        Menu {
+                                            ForEach(ProximityService.thresholdOptions, id: \.value) { option in
+                                                Button(action: {
+                                                    proximityService.proximityThreshold = option.value
+                                                }) {
+                                                    HStack {
+                                                        Text(option.label)
+                                                        if proximityService.proximityThreshold == option.value {
+                                                            Image(systemName: "checkmark")
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                let label = ProximityService.thresholdOptions.first(where: { $0.value == proximityService.proximityThreshold })?.label ?? "Seçiniz"
+                                                Text(label)
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.secondary)
+                                                
+                                                Image(systemName: "chevron.up.chevron.down")
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(Color.secondary.opacity(0.1))
+                                            .cornerRadius(8)
+                                        }
+                                    }
+                                    .padding(16)
+                                    .padding(.leading, 50) 
+                                }
+                            }
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                             
                             // Clear Cache
                             Button(action: { showingClearCacheAlert = true }) {

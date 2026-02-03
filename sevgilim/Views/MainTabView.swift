@@ -22,6 +22,7 @@ struct MainTabView: View {
     @EnvironmentObject var messageService: MessageService
     @EnvironmentObject var secretVaultService: SecretVaultService
     @EnvironmentObject var moodService: MoodService
+    @EnvironmentObject var proximityService: ProximityService
     @EnvironmentObject var navigationRouter: AppNavigationRouter
     
     // MARK: - Cached ViewModel (prevents recreation on tab switch)
@@ -92,12 +93,27 @@ struct MainTabView: View {
         .onChange(of: navigationRouter.photosTrigger) { _, _ in selectedTab = 2 }
         .onChange(of: navigationRouter.notesTrigger) { _, _ in selectedTab = 3 }
         .onChange(of: navigationRouter.memoriesTrigger) { _, _ in selectedTab = 1 }
+        .onReceive(relationshipService.$currentRelationship) { relationship in
+            if let relationship = relationship,
+               let currentUser = authService.currentUser,
+               let userId = currentUser.id,
+               let relationshipId = currentUser.relationshipId {
+                
+                if proximityService.proximityNotificationsEnabled {
+                    let partnerId = relationship.partnerId(for: userId)
+                    proximityService.startTracking(userId: userId, partnerId: partnerId, relationshipId: relationshipId)
+                }
+            }
+        }
     }
     
     private func startServices() {
         guard let currentUser = authService.currentUser,
               let userId = currentUser.id,
               let relationshipId = currentUser.relationshipId else { return }
+        
+        // Ensure relationship service is listening (Critical for finding partner ID)
+        relationshipService.listenToRelationship(relationshipId: relationshipId)
         
         surpriseService.listenToSurprises(relationshipId: relationshipId, userId: userId)
         memoryService.listenToMemories(relationshipId: relationshipId)

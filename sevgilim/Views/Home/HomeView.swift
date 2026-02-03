@@ -14,6 +14,7 @@ struct HomeView: View {
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var greetingService: GreetingService
     @EnvironmentObject private var navigationRouter: AppNavigationRouter
+    @EnvironmentObject private var proximityService: ProximityService
     
     // MARK: - View Model
     @StateObject private var viewModel: HomeViewModel
@@ -85,6 +86,12 @@ struct HomeView: View {
                             DayCounterCard(
                                 startDate: relationship.startDate,
                                 currentDate: currentDate,
+                                theme: themeManager.currentTheme
+                            )
+                            
+                            // Partner Location
+                            PartnerLocationCard(
+                                proximityService: proximityService,
                                 theme: themeManager.currentTheme
                             )
                             

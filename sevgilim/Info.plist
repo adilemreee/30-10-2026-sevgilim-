@@ -9,7 +9,12 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>location</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Partnerinizle buluşmak ve yakınlık bildirimleri almak için konumunuzu kullanıyoruz.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Arka planda partnerinize yaklaştığınızda bildirim alabilmeniz için konumunuza ihtiyacımız var.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIImageName</key>

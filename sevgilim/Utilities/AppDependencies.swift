@@ -34,6 +34,9 @@ final class AppDependencies: ObservableObject {
     lazy var greetingService = GreetingService()
     lazy var secretVaultService = SecretVaultService()
     lazy var moodService = MoodService()
+    lazy var proximityService = ProximityService()
+    
+    private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Convenience Accessors
     
@@ -84,10 +87,30 @@ final class AppDependencies: ObservableObject {
         secretVaultService.listenToVault(relationshipId: relationshipId)
         moodService.listenToMoodStatuses(relationshipId: relationshipId)
         
+        // Proximity Service - Start if enabled (Wait for relationship data)
+        relationshipService.$currentRelationship
+            .compactMap { $0 }
+            .first()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] relationship in
+                guard let self = self else { return }
+                
+                if self.proximityService.proximityNotificationsEnabled {
+                    let partnerId = relationship.partnerId(for: userId)
+                    self.proximityService.startTracking(
+                        userId: userId,
+                        partnerId: partnerId,
+                        relationshipId: relationshipId
+                    )
+                }
+            }
+            .store(in: &cancellables)
+        
         print("🎬 All services started for relationship: \(relationshipId)")
     }
     
     func stopAllServices() {
+        cancellables.removeAll()
         relationshipService.stopListening()
         memoryService.stopListening()
         photoService.stopListening()
@@ -99,6 +122,7 @@ final class AppDependencies: ObservableObject {
         surpriseService.stopListening()
         storyService.stopListening()
         secretVaultService.stopListening()
+        proximityService.stopTracking()
         
         print("🛑 All services stopped")
     }

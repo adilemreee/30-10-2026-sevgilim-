@@ -40,6 +40,7 @@ struct sevgilimApp: App {
                 .environmentObject(dependencies.moodService)
                 .environmentObject(dependencies.greetingService)
                 .environmentObject(dependencies.secretVaultService)
+                .environmentObject(dependencies.proximityService)
                 .onAppear {
                     appDelegate.navigationRouter = dependencies.navigationRouter
                 }
