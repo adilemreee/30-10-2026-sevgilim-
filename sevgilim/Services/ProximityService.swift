@@ -21,7 +21,6 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var isNearby: Bool = false
     @Published var isTrackingEnabled: Bool = false
     @Published var lastNotificationTime: Date?
-    @Published var lastPartnerUpdateTime: Date?
     
     // MARK: - Settings (UserDefaults backed)
     @Published var proximityThreshold: Double {
@@ -92,7 +91,7 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        debugLog("❌ Location manager error: \(error.localizedDescription)")
+        print("❌ Location manager error: \(error.localizedDescription)")
     }
     
     nonisolated func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
@@ -108,16 +107,10 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         // User ID'yi güncelle
         self.currentUserId = userId
         
-        // Safety check: Don't start if disabled
-        guard proximityNotificationsEnabled else {
-            debugLog("🚫 Proximity tracking attempted but passed guard: Disabled by user")
-            return
-        }
-        
         if isTrackingEnabled {
             // Zaten tracking açıksa, sadece konumları yeniden al ve hesapla
             forceRefresh()
-            debugLog("🔄 Proximity tracking refreshed")
+            print("🔄 Proximity tracking refreshed")
             return
         }
         
@@ -129,7 +122,7 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         // Konum güncellemelerini başlat
         startLocationUpdates()
         
-        debugLog("✅ Proximity tracking started for user: \(userId), partner: \(partnerId)")
+        print("✅ Proximity tracking started for user: \(userId), partner: \(partnerId)")
     }
     
     func stopTracking() {
@@ -142,7 +135,7 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         partnerLocation = nil
         userLocation = nil
         
-        debugLog("🔴 Proximity tracking stopped")
+        print("🔴 Proximity tracking stopped")
     }
     
     // MARK: - Start Location Updates
@@ -184,7 +177,7 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
                 guard let self = self else { return }
                 
                 if let error = error {
-                    debugLog("❌ Partner location error: \(error.localizedDescription)")
+                    print("❌ Partner location error: \(error.localizedDescription)")
                     return
                 }
                 
@@ -194,17 +187,8 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
                     return
                 }
                 
-                // Extract timestamp from Firebase
-                let timestamp: Date?
-                if let ts = data["timestamp"] as? Timestamp {
-                    timestamp = ts.dateValue()
-                } else {
-                    timestamp = nil
-                }
-                
                 Task { @MainActor in
                     self.partnerLocation = CLLocation(latitude: latitude, longitude: longitude)
-                    self.lastPartnerUpdateTime = timestamp
                     self.checkProximity()
                 }
             }
@@ -223,9 +207,9 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
             .document(userId)
             .setData(locationData, merge: true) { error in
                 if let error = error {
-                    debugLog("❌ Location update error: \(error.localizedDescription)")
+                    print("❌ Location update error: \(error.localizedDescription)")
                 } else {
-                    debugLog("📍 Location updated")
+                    print("📍 Location updated")
                 }
             }
     }
@@ -262,7 +246,7 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         let wasNearby = isNearby
         isNearby = distance <= proximityThreshold
         
-        debugLog("📍 Distance calculated: \(Int(distance))m (threshold: \(Int(proximityThreshold))m)")
+        print("📍 Distance calculated: \(Int(distance))m (threshold: \(Int(proximityThreshold))m)")
         
         // Yeni yakınlaşma olduysa bildirim gönder
         if isNearby && !wasNearby && proximityNotificationsEnabled {
@@ -275,7 +259,7 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         // Cooldown kontrolü
         if let lastTime = lastNotificationTime,
            Date().timeIntervalSince(lastTime) < notificationCooldown {
-            debugLog("⏳ Notification cooldown active")
+            print("⏳ Notification cooldown active")
             return
         }
         
@@ -295,21 +279,21 @@ class ProximityService: NSObject, ObservableObject, CLLocationManagerDelegate {
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                debugLog("❌ Notification error: \(error.localizedDescription)")
+                print("❌ Notification error: \(error.localizedDescription)")
             } else {
-                debugLog("💕 Proximity notification sent!")
+                print("💕 Proximity notification sent!")
             }
         }
     }
     
     private func formatDistanceMessage(_ distance: Double) -> String {
         if distance < 100 {
-            return "Aşkının kollarındasın... 💑"
+            return "Partneriniz çok yakınında! 💑"
         } else if distance < 500 {
-            return "Aşkın yaklaşık \(Int(distance)) metre uzaklıkta"
+            return "Partneriniz yaklaşık \(Int(distance)) metre uzaklıkta"
         } else {
             let km = distance / 1000
-            return String(format: "Aşkın yaklaşık %.1f km uzaklıkta", km)
+            return String(format: "Partneriniz yaklaşık %.1f km uzaklıkta", km)
         }
     }
     
