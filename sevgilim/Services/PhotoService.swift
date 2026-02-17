@@ -15,6 +15,7 @@ class PhotoService: ObservableObject {
     private let db = Firestore.firestore()
     private var listener: ListenerRegistration?
     private let photosLimit = 50 // Load first 50 photos for performance
+    private let offlineCache = OfflineDataManager.shared
     
     func listenToPhotos(relationshipId: String) {
         // Remove existing listener before creating new one
@@ -22,6 +23,13 @@ class PhotoService: ObservableObject {
         listener = nil
         
         isLoading = true
+        
+        // 🔥 Offline-first: Önce önbellekten yükle (anında göster)
+        if let cachedPhotos = offlineCache.loadPhotos(), !cachedPhotos.isEmpty {
+            self.photos = cachedPhotos
+            self.isLoading = false
+            print("⚡ PhotoService: \(cachedPhotos.count) fotoğraf önbellekten yüklendi")
+        }
         
         listener = db.collection("photos")
             .whereField("relationshipId", isEqualTo: relationshipId)
@@ -57,17 +65,29 @@ class PhotoService: ObservableObject {
                     self.photos = sortedPhotos
                     self.isLoading = false
                     
-                    // Preload thumbnails for better UX
+                    // 💾 Önbelleğe kaydet
+                    self.offlineCache.savePhotos(sortedPhotos)
+                    
+                    // Preload thumbnails for better UX (daha agresif)
                     self.preloadThumbnails(photos: sortedPhotos)
                 }
             }
     }
     
-    // Preload images in cache for smooth scrolling
+    // Preload images in cache for smooth scrolling - agresif önbellek
     private func preloadThumbnails(photos: [Photo]) {
-        let urls = photos.prefix(10).map { $0.thumbnailURL ?? $0.imageURL }
+        // İlk 20 thumbnail'ı hemen yükle
+        let thumbnailUrls = photos.prefix(20).map { $0.thumbnailURL ?? $0.imageURL }
         Task.detached(priority: .background) {
-            await ImageCacheService.shared.preloadImages(Array(urls), thumbnail: true)
+            await ImageCacheService.shared.preloadImages(Array(thumbnailUrls), thumbnail: true)
+        }
+        
+        // WiFi'daysa tüm fotoğrafları offline için önbelleğe al
+        if NetworkMonitor.shared.shouldDownloadLargeMedia {
+            let allUrls = photos.map { $0.thumbnailURL ?? $0.imageURL }
+            Task.detached(priority: .background) {
+                await ImageCacheService.shared.preloadAllForOffline(Array(allUrls))
+            }
         }
     }
     

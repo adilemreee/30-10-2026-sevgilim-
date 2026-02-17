@@ -3,6 +3,7 @@
 //  sevgilim
 //
 //  High-performance image caching service with memory and disk cache
+//  Optimized for offline-first experience with aggressive caching
 
 import UIKit
 import Foundation
@@ -13,21 +14,29 @@ actor ImageCacheService {
     private let memoryCache = NSCache<NSString, UIImage>()
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
+    private let thumbnailCacheDirectory: URL
     
     // In-flight requests to prevent duplicate downloads
     private var inFlightRequests: [String: Task<UIImage?, Error>] = [:]
     
+    // Cache statistics
+    private(set) var cacheHits: Int = 0
+    private(set) var cacheMisses: Int = 0
+    private(set) var diskHits: Int = 0
+    
     private init() {
-        // Configure memory cache
-        memoryCache.countLimit = 100 // Max 100 images in memory
-        memoryCache.totalCostLimit = 1024 * 1024 * 150 // 150 MB max memory usage
+        // Configure memory cache - increased for offline-first
+        memoryCache.countLimit = 200 // Max 200 images in memory
+        memoryCache.totalCostLimit = 1024 * 1024 * 250 // 250 MB max memory usage
         
         // Setup disk cache directory
         let cachesDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         cacheDirectory = cachesDirectory.appendingPathComponent("ImageCache")
+        thumbnailCacheDirectory = cachesDirectory.appendingPathComponent("ThumbnailCache")
         
-        // Create cache directory if needed
+        // Create cache directories if needed
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: thumbnailCacheDirectory, withIntermediateDirectories: true)
         
         // Setup memory warning observer
         NotificationCenter.default.addObserver(
@@ -41,28 +50,33 @@ actor ImageCacheService {
     
     // MARK: - Public API
     
-    /// Load image with automatic caching
+    /// Load image with automatic caching (offline-first)
     func loadImage(from urlString: String, thumbnail: Bool = false) async throws -> UIImage? {
         let cacheKey = thumbnail ? "\(urlString)_thumb" : urlString
         
-        // Check memory cache first
+        // 1. Check memory cache first (fastest)
         if let cachedImage = memoryCache.object(forKey: cacheKey as NSString) {
+            cacheHits += 1
             return cachedImage
         }
         
-        // Check disk cache
-        if let diskImage = loadFromDisk(key: cacheKey) {
-            // Save to memory cache
-            memoryCache.setObject(diskImage, forKey: cacheKey as NSString)
+        // 2. Check disk cache (fast, works offline)
+        if let diskImage = loadFromDisk(key: cacheKey, thumbnail: thumbnail) {
+            // Save to memory cache for next access
+            let cost = Int(diskImage.size.width * diskImage.size.height * 4)
+            memoryCache.setObject(diskImage, forKey: cacheKey as NSString, cost: cost)
+            diskHits += 1
             return diskImage
         }
         
-        // Check if already downloading
+        // 3. Check if already downloading (dedup)
         if let existingTask = inFlightRequests[cacheKey] {
             return try await existingTask.value
         }
         
-        // Download image
+        cacheMisses += 1
+        
+        // 4. Download image from network
         let task = Task<UIImage?, Error> {
             try await downloadAndCache(urlString: urlString, cacheKey: cacheKey, thumbnail: thumbnail)
         }
@@ -76,37 +90,118 @@ actor ImageCacheService {
         return try await task.value
     }
     
-    /// Preload images in background (for upcoming photos)
+    /// Preload images in background with concurrent downloading
     func preloadImages(_ urlStrings: [String], thumbnail: Bool = false) {
         Task {
-            for urlString in urlStrings {
-                _ = try? await loadImage(from: urlString, thumbnail: thumbnail)
+            // Download in batches of 5 for better performance
+            let batchSize = 5
+            for batchStart in stride(from: 0, to: urlStrings.count, by: batchSize) {
+                let batchEnd = min(batchStart + batchSize, urlStrings.count)
+                let batch = Array(urlStrings[batchStart..<batchEnd])
+                
+                await withTaskGroup(of: Void.self) { group in
+                    for urlString in batch {
+                        group.addTask {
+                            _ = try? await self.loadImage(from: urlString, thumbnail: thumbnail)
+                        }
+                    }
+                }
             }
         }
+    }
+    
+    /// Aggressively preload ALL images for a list of URLs (for offline use)
+    func preloadAllForOffline(_ urlStrings: [String]) {
+        Task {
+            let batchSize = 3
+            for batchStart in stride(from: 0, to: urlStrings.count, by: batchSize) {
+                let batchEnd = min(batchStart + batchSize, urlStrings.count)
+                let batch = Array(urlStrings[batchStart..<batchEnd])
+                
+                await withTaskGroup(of: Void.self) { group in
+                    for urlString in batch {
+                        // Download both full and thumbnail versions
+                        group.addTask {
+                            _ = try? await self.loadImage(from: urlString, thumbnail: false)
+                        }
+                        group.addTask {
+                            _ = try? await self.loadImage(from: urlString, thumbnail: true)
+                        }
+                    }
+                }
+            }
+            print("📦 ImageCache: \(urlStrings.count) görsel offline için önbelleğe alındı")
+        }
+    }
+    
+    /// Check if an image exists in cache (memory or disk)
+    func isImageCached(urlString: String, thumbnail: Bool = false) -> Bool {
+        let cacheKey = thumbnail ? "\(urlString)_thumb" : urlString
+        
+        // Check memory
+        if memoryCache.object(forKey: cacheKey as NSString) != nil {
+            return true
+        }
+        
+        // Check disk
+        let fileURL = thumbnail 
+            ? thumbnailCacheDirectory.appendingPathComponent(cacheKey.md5)
+            : cacheDirectory.appendingPathComponent(cacheKey.md5)
+        return fileManager.fileExists(atPath: fileURL.path)
     }
     
     /// Clear all caches
     func clearCache() async {
         memoryCache.removeAllObjects()
         try? fileManager.removeItem(at: cacheDirectory)
+        try? fileManager.removeItem(at: thumbnailCacheDirectory)
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: thumbnailCacheDirectory, withIntermediateDirectories: true)
+        cacheHits = 0
+        cacheMisses = 0
+        diskHits = 0
     }
     
-    /// Clear old cached items (older than 7 days)
+    /// Clear old cached items (older than 30 days for offline support)
     func clearOldCache() async {
-        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
+        let thirtyDaysAgo = Date().addingTimeInterval(-30 * 24 * 60 * 60)
         
-        guard let files = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey]) else {
-            return
-        }
-        
-        for file in files {
-            if let attributes = try? fileManager.attributesOfItem(atPath: file.path),
-               let modificationDate = attributes[.modificationDate] as? Date,
-               modificationDate < sevenDaysAgo {
-                _ = try? fileManager.removeItem(at: file)
+        for directory in [cacheDirectory, thumbnailCacheDirectory] {
+            guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey]) else {
+                continue
+            }
+            
+            for file in files {
+                if let attributes = try? fileManager.attributesOfItem(atPath: file.path),
+                   let modificationDate = attributes[.modificationDate] as? Date,
+                   modificationDate < thirtyDaysAgo {
+                    _ = try? fileManager.removeItem(at: file)
+                }
             }
         }
+    }
+    
+    /// Get total disk cache size
+    func diskCacheSize() -> Int64 {
+        var totalSize: Int64 = 0
+        for directory in [cacheDirectory, thumbnailCacheDirectory] {
+            guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey]) else {
+                continue
+            }
+            for file in files {
+                let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                totalSize += Int64(size)
+            }
+        }
+        return totalSize
+    }
+    
+    /// Human-readable cache size
+    var formattedDiskCacheSize: String {
+        let bytes = diskCacheSize()
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
     }
     
     // MARK: - Private Methods
@@ -116,7 +211,11 @@ actor ImageCacheService {
             throw CacheError.invalidURL
         }
         
-        let (data, _) = try await URLSession.shared.data(from: url)
+        // Use URLSession with caching policy
+        var request = URLRequest(url: url)
+        request.cachePolicy = .returnCacheDataElseLoad
+        
+        let (data, _) = try await URLSession.shared.data(for: request)
         
         guard var image = UIImage(data: data) else {
             throw CacheError.invalidImageData
@@ -127,30 +226,47 @@ actor ImageCacheService {
             image = image.preparingThumbnail(of: CGSize(width: 400, height: 400)) ?? image
         }
         
-        // Save to memory cache
-        memoryCache.setObject(image, forKey: cacheKey as NSString)
+        // Save to memory cache with cost tracking
+        let cost = Int(image.size.width * image.size.height * 4)
+        memoryCache.setObject(image, forKey: cacheKey as NSString, cost: cost)
         
-        // Save to disk cache (in background)
+        // Save to disk cache (in background) - use higher quality for offline
+        let isThumbnail = thumbnail
         Task.detached(priority: .background) {
-            await self.saveToDisk(image: image, key: cacheKey)
+            await self.saveToDisk(image: image, key: cacheKey, thumbnail: isThumbnail)
         }
         
         return image
     }
     
-    private func loadFromDisk(key: String) -> UIImage? {
-        let fileURL = cacheDirectory.appendingPathComponent(key.md5)
-        guard let data = try? Data(contentsOf: fileURL),
-              let image = UIImage(data: data) else {
-            return nil
+    private func loadFromDisk(key: String, thumbnail: Bool = false) -> UIImage? {
+        let directory = thumbnail ? thumbnailCacheDirectory : cacheDirectory
+        let fileURL = directory.appendingPathComponent(key.md5)
+        
+        // Also check the other directory as fallback
+        let fallbackDirectory = thumbnail ? cacheDirectory : thumbnailCacheDirectory
+        let fallbackURL = fallbackDirectory.appendingPathComponent(key.md5)
+        
+        if let data = try? Data(contentsOf: fileURL),
+           let image = UIImage(data: data) {
+            return image
         }
-        return image
+        
+        // Fallback check
+        if let data = try? Data(contentsOf: fallbackURL),
+           let image = UIImage(data: data) {
+            return image
+        }
+        
+        return nil
     }
     
-    private func saveToDisk(image: UIImage, key: String) {
-        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
-        let fileURL = cacheDirectory.appendingPathComponent(key.md5)
-        try? data.write(to: fileURL)
+    private func saveToDisk(image: UIImage, key: String, thumbnail: Bool = false) {
+        let quality: CGFloat = thumbnail ? 0.7 : 0.85
+        guard let data = image.jpegData(compressionQuality: quality) else { return }
+        let directory = thumbnail ? thumbnailCacheDirectory : cacheDirectory
+        let fileURL = directory.appendingPathComponent(key.md5)
+        try? data.write(to: fileURL, options: .atomic)
     }
     
     private func handleMemoryWarning() {

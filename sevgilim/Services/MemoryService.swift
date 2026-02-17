@@ -15,15 +15,21 @@ class MemoryService: ObservableObject {
     private let db = Firestore.firestore()
     private var listener: ListenerRegistration?
     private let memoriesLimit = 30 // Load first 30 memories for performance
+    private let offlineCache = OfflineDataManager.shared
     
     func listenToMemories(relationshipId: String) {
         listener?.remove()
+        listener = nil
         isLoading = true
         
-        // Optimized query: limit results for faster loading
-        guard listener == nil else { return }
+        // 🔥 Offline-first: Önce önbellekten yükle
+        if let cachedMemories = offlineCache.loadMemories(), !cachedMemories.isEmpty {
+            self.memories = cachedMemories
+            self.isLoading = false
+            print("⚡ MemoryService: \(cachedMemories.count) anı önbellekten yüklendi")
+        }
         
-        isLoading = true
+        isLoading = memories.isEmpty // Sadece önbellek boşsa loading göster
         
         listener = db.collection("memories")
             .whereField("relationshipId", isEqualTo: relationshipId)
@@ -63,6 +69,17 @@ class MemoryService: ObservableObject {
                 Task { @MainActor in
                     self.memories = sortedMemories
                     self.isLoading = false
+                    
+                    // 💾 Önbelleğe kaydet
+                    self.offlineCache.saveMemories(sortedMemories)
+                    
+                    // Anı fotoğraflarını önbelleğe al
+                    let photoURLs = sortedMemories.flatMap { $0.allPhotoURLs }
+                    if !photoURLs.isEmpty {
+                        Task.detached(priority: .background) {
+                            await ImageCacheService.shared.preloadImages(photoURLs, thumbnail: true)
+                        }
+                    }
                 }
             }
     }

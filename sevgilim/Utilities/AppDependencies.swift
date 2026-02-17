@@ -107,6 +107,11 @@ final class AppDependencies: ObservableObject {
             .store(in: &cancellables)
         
         print("🎬 All services started for relationship: \(relationshipId)")
+        
+        // Eski önbelleği temizle (30 günden eski)
+        Task.detached(priority: .background) {
+            await ImageCacheService.shared.clearOldCache()
+        }
     }
     
     func stopAllServices() {
@@ -125,5 +130,16 @@ final class AppDependencies: ObservableObject {
         proximityService.stopTracking()
         
         print("🛑 All services stopped")
+    }
+    
+    /// Çıkış yaparken tüm önbellekleri temizle
+    func clearAllCaches() {
+        OfflineDataManager.shared.clearAll()
+        Task {
+            await ImageCacheService.shared.clearCache()
+        }
+        VideoCacheService.shared.clearCache()
+        OfflineSyncManager.shared.clearQueue()
+        print("🗑️ Tüm önbellekler temizlendi")
     }
 }

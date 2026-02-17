@@ -14,15 +14,21 @@ class NoteService: ObservableObject {
     
     private let db = Firestore.firestore()
     private var listener: ListenerRegistration?
+    private let offlineCache = OfflineDataManager.shared
     
     func listenToNotes(relationshipId: String) {
         listener?.remove()
+        listener = nil
         isLoading = true
         
-        // Optimized query with limit for better performance
-        guard listener == nil else { return }
+        // 🔥 Offline-first: Önce önbellekten yükle
+        if let cachedNotes = offlineCache.loadNotes(), !cachedNotes.isEmpty {
+            self.notes = cachedNotes
+            self.isLoading = false
+            print("⚡ NoteService: \(cachedNotes.count) not önbellekten yüklendi")
+        }
         
-        isLoading = true
+        isLoading = notes.isEmpty
         
         listener = db.collection("notes")
             .whereField("relationshipId", isEqualTo: relationshipId)
@@ -56,6 +62,9 @@ class NoteService: ObservableObject {
                 Task { @MainActor in
                     self.notes = sortedNotes
                     self.isLoading = false
+                    
+                    // 💾 Önbelleğe kaydet
+                    self.offlineCache.saveNotes(sortedNotes)
                 }
             }
     }

@@ -6,6 +6,7 @@
 import SwiftUI
 import FirebaseCore
 import FirebaseAuth
+import FirebaseFirestore
 import FirebaseMessaging
 import UserNotifications
 
@@ -77,6 +78,15 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     ) -> Bool {
         // Firebase'i yapılandır
         FirebaseApp.configure()
+        
+        // Firestore offline persistence - Daha büyük cache ve offline destek
+        let firestoreSettings = Firestore.firestore().settings
+        firestoreSettings.cacheSettings = PersistentCacheSettings(sizeBytes: 100 * 1024 * 1024 as NSNumber) // 100 MB cache
+        firestoreSettings.isSSLEnabled = true
+        Firestore.firestore().settings = firestoreSettings
+        
+        // Ağ izleme başlat
+        NetworkMonitor.shared.startMonitoring()
         
         // Bildirim delegelerini ayarla
         UNUserNotificationCenter.current().delegate = self

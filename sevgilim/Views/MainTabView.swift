@@ -55,6 +55,10 @@ struct MainTabView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .top) {
+                // Çevrimdışı banner - üstte göster
+                OfflineBannerView()
+            }
             .safeAreaInset(edge: .bottom) {
                 // Tab bar için boşluk - sadece tab bar görünürken
                 Color.clear.frame(height: navigationRouter.hideTabBar ? 0 : 70)

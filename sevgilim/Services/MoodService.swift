@@ -14,10 +14,21 @@ final class MoodService: ObservableObject {
     
     private let db = Firestore.firestore()
     private var listener: ListenerRegistration?
+    private let offlineCache = OfflineDataManager.shared
     
     func listenToMoodStatuses(relationshipId: String) {
         listener?.remove()
+        listener = nil
         isLoading = true
+        
+        // 🔥 Offline-first: Önce önbellekten yükle
+        if let cachedStatuses = offlineCache.loadMoodStatuses(), !cachedStatuses.isEmpty {
+            self.moodsByUser = cachedStatuses.reduce(into: [:]) { result, status in
+                result[status.userId] = status
+            }
+            self.isLoading = false
+            print("⚡ MoodService: \(cachedStatuses.count) ruh hali önbellekten yüklendi")
+        }
         
         listener = db.collection("moodStatuses")
             .whereField("relationshipId", isEqualTo: relationshipId)
@@ -42,6 +53,9 @@ final class MoodService: ObservableObject {
                 let statuses = documents.compactMap { doc in
                     try? doc.data(as: MoodStatus.self)
                 }
+                
+                // 💾 Önbelleğe kaydet
+                self.offlineCache.saveMoodStatuses(statuses)
                 
                 Task { @MainActor in
                     self.moodsByUser = statuses.reduce(into: [:]) { result, status in
